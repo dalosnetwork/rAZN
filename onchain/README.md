@@ -1,5 +1,7 @@
 # Digital Manat
 
+BSC Testnet Contract Address: 0xB11FC1e75b837E1719565271bA4bA5b6B2e794FE
+
 Digital Manat is a fiat-referenced, upgradeable stablecoin project built with Solidity and Foundry. The repository currently contains the token logic contract, a custom EIP-1967 transparent proxy, a proxy admin contract, and Python scripts for deployment and day-to-day operations.
 
 This codebase is designed for a centrally managed, compliance-aware stable asset with operational controls such as pausing, blacklisting, controlled minting, and proxy-based upgrades.
