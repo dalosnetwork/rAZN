@@ -1,0 +1,19 @@
+[profile.default]
+src = "contracts"
+out = "out"
+libs = ["lib"]
+test = "test"
+cache_path = "cache"
+
+solc_version = "0.8.24"
+optimizer = true
+optimizer_runs = 20000
+via_ir = false
+
+# Helpful for debugging
+verbosity = 2
+
+remappings = [
+  "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
+  "@openzeppelin/contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/contracts/"
+]
