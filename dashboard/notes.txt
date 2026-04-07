@@ -1,0 +1,10 @@
+-> account overviewde nerelere componentlerden eklenebilir bak
+
+->grafik listesi 
+
+
+tıkladığında charta scroll
+also 
+
+
+Upgrades: Proxy pattern for contract updates??

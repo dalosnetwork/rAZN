@@ -1,0 +1,32 @@
+# Set CADDY_HOST to your public domain (for example: dashboard.example.com).
+# Caddy will automatically provision and renew TLS certificates for this host.
+{$CADDY_HOST} {
+  encode zstd gzip
+
+  @health path /healthz
+  handle @health {
+    respond "ok" 200
+  }
+
+  handle /api* {
+    reverse_proxy api:3002 {
+      header_up X-Real-IP {remote_host}
+    }
+  }
+
+  handle {
+    reverse_proxy web:3000 {
+      header_up X-Real-IP {remote_host}
+    }
+  }
+}
+
+# Internal-only health endpoint for container healthchecks.
+:8080 {
+  @health path /healthz
+  handle @health {
+    respond "ok" 200
+  }
+
+  respond "not found" 404
+}

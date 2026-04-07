@@ -1,0 +1,37 @@
+{
+  "name": "api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./app": "./src/app.ts"
+  },
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "test": "node --import tsx/esm --test src/**/*.test.ts",
+    "worker:example": "tsx src/jobs/workers/example.worker.ts",
+    "seed:rbac": "tsx src/scripts/seed-rbac.ts",
+    "preflight:dashboard-integrity": "tsx src/scripts/preflight-dashboard-integrity.ts",
+    "check-types": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.14.2",
+    "@repo/auth": "workspace:*",
+    "@repo/db": "workspace:*",
+    "better-auth": "^1.5.1",
+    "bullmq": "^5.58.0",
+    "drizzle-orm": "^0.44.7",
+    "dotenv": "^16.6.1",
+    "hono": "^4.8.3",
+    "ioredis": "5.9.3",
+    "viem": "^2.47.6"
+  },
+  "devDependencies": {
+    "@repo/typescript-config": "workspace:*",
+    "@types/node": "^22.15.3",
+    "tsx": "^4.20.6",
+    "typescript": "5.9.2"
+  }
+}
