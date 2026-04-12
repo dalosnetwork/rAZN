@@ -16,6 +16,10 @@
     "dev": {
       "cache": false,
       "persistent": true
+    },
+    "worker:reserve-snapshot": {
+      "cache": false,
+      "persistent": true
     }
   }
 }

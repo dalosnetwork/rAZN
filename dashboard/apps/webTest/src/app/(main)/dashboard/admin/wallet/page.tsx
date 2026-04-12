@@ -2,6 +2,8 @@
 
 import * as React from "react";
 
+import { toast } from "sonner";
+
 import { MvpDetailDrawer } from "@/app/(main)/dashboard/_mvp/components/detail-drawer";
 import {
   formatCurrency,
@@ -25,7 +27,12 @@ import type { MvpStatus } from "@/app/(main)/dashboard/_mvp/types";
 
 import { useI18n } from "@/components/providers/language-provider";
 import { Button } from "@/components/ui/button";
-import { useAdminWalletQuery } from "@/lib/queries/dashboard";
+import { useMeQuery } from "@/lib/queries/auth";
+import {
+  useAdminWalletQuery,
+  useUpdateAdminWalletStatusMutation,
+} from "@/lib/queries/dashboard";
+import { hasAccessPermission } from "@/lib/rbac/route-access";
 
 type AdminWalletRecord = {
   id: string;
@@ -239,7 +246,13 @@ function buildActivityColumns(
 
 export default function Page() {
   const { tt } = useI18n();
+  const meQuery = useMeQuery();
   const adminWalletQuery = useAdminWalletQuery();
+  const updateWalletStatusMutation = useUpdateAdminWalletStatusMutation();
+  const canManageWalletApprovals =
+    hasAccessPermission(meQuery.data?.access, "offchain.fiat_movements") ||
+    hasAccessPermission(meQuery.data?.access, "offchain.emergency") ||
+    hasAccessPermission(meQuery.data?.access, "token.pause");
   const [search, setSearch] = React.useState("");
   const [selectedWallet, setSelectedWallet] =
     React.useState<AdminWalletRecord | null>(null);
@@ -290,6 +303,29 @@ export default function Page() {
     [tt],
   );
   const activityColumns = React.useMemo(() => buildActivityColumns(tt), [tt]);
+
+  async function updateWalletStatus(
+    walletAddressId: string,
+    status: "pending" | "under_review" | "verified" | "rejected" | "inactive",
+  ) {
+    try {
+      await updateWalletStatusMutation.mutateAsync({
+        walletAddressId,
+        status,
+      });
+      const refreshed = await adminWalletQuery.refetch();
+      const updatedWallet =
+        ((refreshed.data?.wallets ?? []) as AdminWalletRecord[]).find(
+          (entry) => entry.id === walletAddressId,
+        ) ?? null;
+      setSelectedWallet(updatedWallet);
+      toast.success(tt("Wallet status updated."));
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : tt("Could not update wallet."),
+      );
+    }
+  }
 
   return (
     <div className="@container/main flex flex-col gap-4 md:gap-6">
@@ -386,7 +422,31 @@ export default function Page() {
         }
         footer={
           selectedWallet ? (
-            <Button disabled>{tt("Save changes")}</Button>
+            <div className="grid grid-cols-1 gap-2">
+              <Button
+                disabled={
+                  !canManageWalletApprovals ||
+                  updateWalletStatusMutation.isPending
+                }
+                onClick={() =>
+                  void updateWalletStatus(selectedWallet.id, "verified")
+                }
+              >
+                {tt("Approve wallet")}
+              </Button>
+              <Button
+                variant="outline"
+                disabled={
+                  !canManageWalletApprovals ||
+                  updateWalletStatusMutation.isPending
+                }
+                onClick={() =>
+                  void updateWalletStatus(selectedWallet.id, "rejected")
+                }
+              >
+                {tt("Reject wallet")}
+              </Button>
+            </div>
           ) : null
         }
       >

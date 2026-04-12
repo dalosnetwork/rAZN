@@ -36,6 +36,20 @@
       "when": 1774804486816,
       "tag": "0004_freezing_firebrand",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1775869800000,
+      "tag": "0005_bank_account_number_and_address",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1775872200000,
+      "tag": "0006_user_notifications",
+      "breakpoints": true
     }
   ]
 }

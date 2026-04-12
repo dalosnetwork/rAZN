@@ -51,7 +51,6 @@ type MintFormState = {
   amount: string;
   paymentRef: string;
   destination: string;
-  sourceAccount: string;
   note: string;
 };
 
@@ -63,7 +62,6 @@ const initialFormState: MintFormState = {
   amount: "",
   paymentRef: "",
   destination: "",
-  sourceAccount: "primary",
   note: "",
 };
 
@@ -85,6 +83,10 @@ function canCreateOwnMintRequest(access: UserAccess | null | undefined) {
     return false;
   }
   return hasAccessPermission(access, "dashboard.view");
+}
+
+function hasApprovedKybStatus(status: string | undefined) {
+  return status === "approved";
 }
 
 function validateMintForm(
@@ -159,6 +161,9 @@ export default function Page() {
   const dashboardStateQuery = useDashboardStateQuery();
   const createMintRequestMutation = useCreateMintRequestMutation();
   const canCreateMintRequest = canCreateOwnMintRequest(meQuery.data?.access);
+  const hasApprovedKyb = hasApprovedKybStatus(
+    dashboardStateQuery.data?.overviewCards.kybStatus,
+  );
   const canManageMintStatus = hasAccessPermission(
     meQuery.data?.access,
     "dashboard.manage",
@@ -201,6 +206,12 @@ export default function Page() {
 
     return walletAddresses
       .filter((wallet) => {
+        if (
+          wallet.connectionStatus !== "connected" ||
+          wallet.verificationStatus !== "verified"
+        ) {
+          return false;
+        }
         const normalizedAddress = wallet.address.trim().toLowerCase();
         if (!normalizedAddress || seen.has(normalizedAddress)) {
           return false;
@@ -214,6 +225,8 @@ export default function Page() {
         network: wallet.network,
       }));
   }, [dashboardStateQuery.data?.walletAddresses]);
+  const hasLinkedWallets =
+    (dashboardStateQuery.data?.walletAddresses?.length ?? 0) > 0;
 
   const destinationLookup = React.useMemo(
     () =>
@@ -222,6 +235,8 @@ export default function Page() {
       ),
     [destinationOptions],
   );
+  const canSubmitMintRequest =
+    canCreateMintRequest && hasApprovedKyb && destinationOptions.length > 0;
 
   const pendingAmount = requests
     .filter((request) =>
@@ -248,6 +263,10 @@ export default function Page() {
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!canCreateMintRequest) {
+      return;
+    }
+    if (!hasApprovedKyb) {
+      setSubmissionState("error");
       return;
     }
 
@@ -325,6 +344,11 @@ export default function Page() {
           title={tt("Create mint request")}
           description={tt("Submit the minimum details required to start a mint operation.")}
         >
+          {!hasApprovedKyb ? (
+            <p className="pb-3 text-destructive text-sm">
+              {tt("KYB must be approved before submitting mint requests.")}
+            </p>
+          ) : null}
           <form
             onSubmit={handleSubmit}
             className="grid grid-cols-1 gap-4 md:grid-cols-2"
@@ -344,29 +368,6 @@ export default function Page() {
               {errors.amount ? (
                 <p className="text-destructive text-xs">{tt(errors.amount)}</p>
               ) : null}
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="mint-source">{tt("Source account")}</Label>
-              <Select
-                value={form.sourceAccount}
-                disabled={!canCreateMintRequest}
-                onValueChange={(value) =>
-                  updateFormField("sourceAccount", value)
-                }
-              >
-                <SelectTrigger id="mint-source">
-                  <SelectValue placeholder={tt("Select source")} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="primary">
-                    {tt("Primary settlement account")}
-                  </SelectItem>
-                  <SelectItem value="secondary">
-                    {tt("Secondary treasury account")}
-                  </SelectItem>
-                </SelectContent>
-              </Select>
             </div>
 
             <div className="space-y-2">
@@ -405,7 +406,7 @@ export default function Page() {
                     placeholder={
                       destinationOptions.length > 0
                         ? tt("Select your wallet address")
-                        : tt("No wallet address available")
+                        : tt("No approved wallet address available")
                     }
                   />
                 </SelectTrigger>
@@ -424,7 +425,9 @@ export default function Page() {
               ) : null}
               {destinationOptions.length === 0 ? (
                 <p className="text-muted-foreground text-xs">
-                  {tt("Add a wallet address in Wallet page first.")}
+                  {hasLinkedWallets
+                    ? tt("Your wallet must be approved by admin before it can be used for mint requests.")
+                    : tt("Add a wallet address in Wallet page first.")}
                 </p>
               ) : null}
             </div>
@@ -447,8 +450,7 @@ export default function Page() {
               <Button
                 type="submit"
                 disabled={
-                  !canCreateMintRequest ||
-                  destinationOptions.length === 0 ||
+                  !canSubmitMintRequest ||
                   submissionState === "submitting"
                 }
               >

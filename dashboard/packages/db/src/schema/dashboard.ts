@@ -160,6 +160,8 @@ export const bankAccountsTable = dashboardSchema.table(
     accountHolder: text("account_holder").notNull(),
     bankName: text("bank_name").notNull(),
     ibanMasked: text("iban_masked").notNull(),
+    accountNumberMasked: text("account_number_masked"),
+    bankAddress: text("bank_address"),
     swiftCode: text("swift_code"),
     country: text("country").notNull(),
     currency: text("currency").notNull(),
@@ -913,6 +915,45 @@ export const userNotificationPreferencesTable = dashboardSchema.table(
     userPreferenceChannelUniqueIdx: uniqueIndex(
       "dashboard_user_notification_preferences_user_preference_channel_unique",
     ).on(table.userId, table.preferenceKey, table.channel),
+  }),
+);
+
+export const userNotificationsTable = dashboardSchema.table(
+  "user_notifications",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => userTable.id, { onDelete: "cascade" }),
+    category: text("category").notNull(),
+    title: text("title").notNull(),
+    message: text("message").notNull(),
+    channel: notificationChannelEnum("channel").notNull().default("in_app"),
+    eventStatus: workflowStatusEnum("event_status").notNull().default("active"),
+    entityType: text("entity_type"),
+    entityRef: text("entity_ref"),
+    isRead: boolean("is_read").notNull().default(false),
+    readAt: timestamp("read_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    userCreatedIdx: index("dashboard_user_notifications_user_created_idx").on(
+      table.userId,
+      table.createdAt,
+    ),
+    userReadCreatedIdx: index(
+      "dashboard_user_notifications_user_read_created_idx",
+    ).on(table.userId, table.isRead, table.createdAt),
+    userEntityIdx: index("dashboard_user_notifications_user_entity_idx").on(
+      table.userId,
+      table.entityType,
+      table.entityRef,
+    ),
   }),
 );
 

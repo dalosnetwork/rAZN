@@ -2,11 +2,11 @@
 const currentYear = new Date().getFullYear();
 
 export const APP_CONFIG = {
-  name: "Dalos Dashboard",
-  copyright: `© ${currentYear}, Dalos Network.`,
+  name: "rAZN",
+  copyright: `© ${currentYear}, rAZN.`,
   meta: {
-    title: "Dalos Dashboard",
+    title: "rAZN",
     description:
-      "Dalos Dashboard is a modern, open-source dashboard built with Next.js 16, Tailwind CSS v4, and shadcn/ui. Perfect for SaaS apps, admin panels, and internal tools—fully customizable and production-ready.",
+      "rAZN is a 1:1 pegged digital Azerbaijan manat.",
   },
 };

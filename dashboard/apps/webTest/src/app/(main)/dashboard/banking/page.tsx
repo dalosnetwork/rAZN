@@ -43,6 +43,8 @@ type BankAccount = {
   accountHolder: string;
   bankName: string;
   ibanMasked: string;
+  accountNumberMasked: string;
+  bankAddress: string;
   swiftCode: string;
   country: string;
   currency: string;
@@ -55,6 +57,8 @@ type NewBankAccountForm = {
   accountHolder: string;
   bankName: string;
   iban: string;
+  accountNumber: string;
+  bankAddress: string;
   swiftCode: string;
   country: string;
   currency: string;
@@ -64,6 +68,8 @@ const emptyForm: NewBankAccountForm = {
   accountHolder: "",
   bankName: "",
   iban: "",
+  accountNumber: "",
+  bankAddress: "",
   swiftCode: "",
   country: "United Kingdom",
   currency: "USD",
@@ -86,6 +92,15 @@ function maskIban(rawIban: string) {
   }
 
   return `${trimmed.slice(0, 2)}**${trimmed.slice(2, 6)}****${trimmed.slice(-4)}`;
+}
+
+function maskAccountNumber(rawAccountNumber: string) {
+  const trimmed = rawAccountNumber.replaceAll(/\s+/g, "");
+  if (trimmed.length <= 4) {
+    return trimmed;
+  }
+
+  return `${"*".repeat(Math.max(0, trimmed.length - 4))}${trimmed.slice(-4)}`;
 }
 
 function buildColumns(
@@ -118,6 +133,18 @@ function buildColumns(
       cell: (row) => (
         <span className="font-mono text-xs">{row.ibanMasked}</span>
       ),
+    },
+    {
+      id: "accountNumber",
+      header: tt("Account number"),
+      cell: (row) => (
+        <span className="font-mono text-xs">{row.accountNumberMasked}</span>
+      ),
+    },
+    {
+      id: "bankAddress",
+      header: tt("Bank address"),
+      cell: (row) => row.bankAddress,
     },
     {
       id: "currency",
@@ -181,6 +208,8 @@ export default function Page() {
         account.accountHolder.toLowerCase().includes(query) ||
         account.bankName.toLowerCase().includes(query) ||
         account.ibanMasked.toLowerCase().includes(query) ||
+        account.accountNumberMasked.toLowerCase().includes(query) ||
+        account.bankAddress.toLowerCase().includes(query) ||
         account.country.toLowerCase().includes(query)
       );
     });
@@ -213,7 +242,9 @@ export default function Page() {
     if (
       !form.accountHolder.trim() ||
       !form.bankName.trim() ||
-      !form.iban.trim()
+      !form.iban.trim() ||
+      !form.accountNumber.trim() ||
+      !form.bankAddress.trim()
     ) {
       toast.error(tt("Please complete required bank account fields."));
       return;
@@ -224,6 +255,8 @@ export default function Page() {
         accountHolder: form.accountHolder.trim(),
         bankName: form.bankName.trim(),
         ibanMasked: maskIban(form.iban),
+        accountNumberMasked: maskAccountNumber(form.accountNumber),
+        bankAddress: form.bankAddress.trim(),
         swiftCode: form.swiftCode.trim() || undefined,
         country: form.country,
         currency: form.currency,
@@ -286,7 +319,7 @@ export default function Page() {
         <MvpTableToolbar
           searchValue={search}
           onSearchChange={setSearch}
-          searchPlaceholder={tt("Search account holder, bank, IBAN, or country")}
+          searchPlaceholder={tt("Search account holder, bank, IBAN, account number, address, or country")}
         />
         <MvpSimpleTable
           columns={columns}
@@ -329,6 +362,28 @@ export default function Page() {
               value={form.iban}
               disabled={!canAddBankAccount}
               onChange={(event) => setFormField("iban", event.target.value)}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="bank-account-number">{tt("Account number")}</Label>
+            <Input
+              id="bank-account-number"
+              value={form.accountNumber}
+              disabled={!canAddBankAccount}
+              onChange={(event) =>
+                setFormField("accountNumber", event.target.value)
+              }
+            />
+          </div>
+          <div className="space-y-2 md:col-span-2">
+            <Label htmlFor="bank-address">{tt("Bank address")}</Label>
+            <Input
+              id="bank-address"
+              value={form.bankAddress}
+              disabled={!canAddBankAccount}
+              onChange={(event) =>
+                setFormField("bankAddress", event.target.value)
+              }
             />
           </div>
           <div className="space-y-2">
@@ -416,6 +471,20 @@ export default function Page() {
             <div>
               <p className="text-muted-foreground text-xs">{tt("IBAN")}</p>
               <p className="font-mono text-xs">{selectedAccount.ibanMasked}</p>
+            </div>
+            <div>
+              <p className="text-muted-foreground text-xs">
+                {tt("Account number")}
+              </p>
+              <p className="font-mono text-xs">
+                {selectedAccount.accountNumberMasked}
+              </p>
+            </div>
+            <div>
+              <p className="text-muted-foreground text-xs">
+                {tt("Bank address")}
+              </p>
+              <p className="font-medium">{selectedAccount.bankAddress}</p>
             </div>
             <div>
               <p className="text-muted-foreground text-xs">{tt("SWIFT")}</p>

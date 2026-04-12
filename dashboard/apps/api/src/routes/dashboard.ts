@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import {
   DASHBOARD_EDITOR_ROLE_SLUGS,
+  RBAC_PERMISSIONS,
   RBAC_ROLES,
   SUPER_ADMIN_ROLE_SLUG,
 } from "@repo/auth/rbac";
@@ -9,11 +10,15 @@ import {
   DASHBOARD_ADMIN_BANK_ACCOUNT_DOMAIN_ERRORS,
   DASHBOARD_ADMIN_KYB_DOCUMENT_DOMAIN_ERRORS,
   DASHBOARD_ADMIN_KYB_DOMAIN_ERRORS,
+  DASHBOARD_ADMIN_PROFILE_DOMAIN_ERRORS,
+  DASHBOARD_ADMIN_WALLET_DOMAIN_ERRORS,
+  disableAdminInstitutionProfile,
   getAdminKybDocumentFile,
   getAdminKybCases,
   getAdminOverviewState,
   getAdminReserveManagementState,
   getAdminWalletState,
+  updateAdminWalletStatus,
   updateAdminKybDocumentStatus,
   updateAdminBankAccountStatus,
   updateAdminKybCaseStatus,
@@ -21,6 +26,7 @@ import {
 import {
   DASHBOARD_ADMIN_REQUEST_DOMAIN_ERRORS,
   DASHBOARD_KYB_DOCUMENT_DOMAIN_ERRORS,
+  DASHBOARD_REQUEST_CREATION_DOMAIN_ERRORS,
   connectWalletForUser,
   createBankAccountForUser,
   createMintRequestForUser,
@@ -36,6 +42,17 @@ import {
   updateRedeemRequestStatusForAdmin,
   upsertDashboardSettingsForUser,
 } from "../lib/dashboard-domain";
+import {
+  listNotificationsForUser,
+  markAllNotificationsAsReadForUser,
+  markNotificationsAsReadForUser,
+} from "../lib/dashboard-notifications";
+import {
+  listRbacPermissions,
+  listRbacRolesWithPermissions,
+  RBAC_MANAGEMENT_ERRORS,
+  updateRolePermissionsBySlug,
+} from "../lib/rbac";
 import {
   getUserWithRolesById,
   listUsersWithRolesPaginated,
@@ -77,7 +94,12 @@ const ALLOWED_USERS_SORT_FIELDS: UsersSortBy[] = [
 const DEFAULT_USERS_PAGE_SIZE = 10;
 const DEFAULT_USERS_SORT_BY: UsersSortBy = "createdAt";
 const DEFAULT_USERS_SORT_DIRECTION: UsersSortDirection = "desc";
+const ALLOWED_NOTIFICATION_PAGE_SIZES = [10, 20, 50] as const;
+const DEFAULT_NOTIFICATION_PAGE_SIZE = 20;
 const ALLOWED_ROLE_SLUGS = new Set(RBAC_ROLES.map((role) => role.slug));
+const ALLOWED_PERMISSION_KEYS = new Set(
+  RBAC_PERMISSIONS.map((permission) => permission.key),
+);
 const ALLOWED_PAYOUT_RAILS = ["bank", "swift", "crypto"] as const;
 const ALLOWED_NOTIFICATION_CHANNELS = ["email", "in_app", "sms"] as const;
 const ALLOWED_DOCUMENT_DELIVERY_CHANNELS = ["email", "in_app"] as const;
@@ -107,6 +129,13 @@ const ALLOWED_ADMIN_KYB_DOCUMENT_STATUSES = [
   "needs_update",
 ] as const;
 const ALLOWED_ADMIN_BANK_ACCOUNT_STATUSES = [
+  "pending",
+  "under_review",
+  "verified",
+  "rejected",
+  "inactive",
+] as const;
+const ALLOWED_ADMIN_WALLET_STATUSES = [
   "pending",
   "under_review",
   "verified",
@@ -194,6 +223,18 @@ function parseUsersPageSize(value: string | undefined) {
   return DEFAULT_USERS_PAGE_SIZE;
 }
 
+function parseNotificationPageSize(value: string | undefined) {
+  const parsed = parsePositiveInt(value, DEFAULT_NOTIFICATION_PAGE_SIZE);
+  if (
+    ALLOWED_NOTIFICATION_PAGE_SIZES.includes(
+      parsed as (typeof ALLOWED_NOTIFICATION_PAGE_SIZES)[number],
+    )
+  ) {
+    return parsed;
+  }
+  return DEFAULT_NOTIFICATION_PAGE_SIZE;
+}
+
 function parseUsersSortBy(value: string | undefined): UsersSortBy {
   if (value && ALLOWED_USERS_SORT_FIELDS.includes(value as UsersSortBy)) {
     return value as UsersSortBy;
@@ -242,6 +283,37 @@ function parseRoleSlugs(value: unknown) {
       !ALLOWED_ROLE_SLUGS.has(slug as (typeof RBAC_ROLES)[number]["slug"]),
   );
   if (hasInvalidRole) {
+    return null;
+  }
+
+  return normalized;
+}
+
+function parsePermissionKeys(value: unknown) {
+  if (!Array.isArray(value)) {
+    return null;
+  }
+
+  const normalizedEntries: string[] = [];
+  for (const entry of value) {
+    const parsedKey = parseRequiredSingleLineText(entry, {
+      field: "permissionKeys entry",
+      maxLength: 64,
+    });
+    if (!parsedKey.ok) {
+      return null;
+    }
+    normalizedEntries.push(parsedKey.value);
+  }
+
+  const normalized = Array.from(new Set(normalizedEntries));
+  const hasInvalidPermissionKey = normalized.some(
+    (key) =>
+      !ALLOWED_PERMISSION_KEYS.has(
+        key as (typeof RBAC_PERMISSIONS)[number]["key"],
+      ),
+  );
+  if (hasInvalidPermissionKey) {
     return null;
   }
 
@@ -645,6 +717,8 @@ function parseCreateBankAccountPayload(payload: unknown):
         accountHolder: string;
         bankName: string;
         ibanMasked: string;
+        accountNumberMasked: string;
+        bankAddress: string;
         swiftCode?: string;
         country: string;
         currency: string;
@@ -670,6 +744,19 @@ function parseCreateBankAccountPayload(payload: unknown):
     field: "ibanMasked",
     maxLength: 64,
     allowCodeLike: true,
+  });
+  const accountNumberMasked = parseRequiredSingleLineText(
+    payload.accountNumberMasked,
+    {
+      field: "accountNumberMasked",
+      maxLength: 64,
+      allowCodeLike: true,
+    },
+  );
+  const bankAddress = parseRequiredSingleLineText(payload.bankAddress, {
+    field: "bankAddress",
+    maxLength: 200,
+    collapseWhitespace: true,
   });
   const swiftCode = parseOptionalSingleLineText(payload.swiftCode, {
     field: "swiftCode",
@@ -697,6 +784,12 @@ function parseCreateBankAccountPayload(payload: unknown):
   if (!ibanMasked.ok) {
     return { ok: false, message: ibanMasked.message };
   }
+  if (!accountNumberMasked.ok) {
+    return { ok: false, message: accountNumberMasked.message };
+  }
+  if (!bankAddress.ok) {
+    return { ok: false, message: bankAddress.message };
+  }
   if (!swiftCode.ok) {
     return { ok: false, message: swiftCode.message };
   }
@@ -713,10 +806,64 @@ function parseCreateBankAccountPayload(payload: unknown):
       accountHolder: accountHolder.value,
       bankName: bankName.value,
       ibanMasked: ibanMasked.value,
+      accountNumberMasked: accountNumberMasked.value,
+      bankAddress: bankAddress.value,
       swiftCode: swiftCode.value,
       country: country.value,
       currency: currency.value,
       isPrimary,
+    },
+  };
+}
+
+function parseNotificationsReadPayload(payload: unknown):
+  | {
+      ok: true;
+      value: {
+        markAll: boolean;
+        ids: string[];
+      };
+    }
+  | { ok: false; message: string } {
+  if (!payload || typeof payload !== "object") {
+    return { ok: false, message: "Invalid request body" };
+  }
+
+  const markAll =
+    typeof (payload as { markAll?: unknown }).markAll === "boolean"
+      ? ((payload as { markAll?: boolean }).markAll ?? false)
+      : false;
+
+  const idsRaw = (payload as { ids?: unknown }).ids;
+  const ids: string[] = [];
+  if (idsRaw !== undefined) {
+    if (!Array.isArray(idsRaw)) {
+      return { ok: false, message: "ids must be an array of strings" };
+    }
+    for (const value of idsRaw) {
+      if (typeof value !== "string") {
+        return { ok: false, message: "ids must contain only strings" };
+      }
+      const parsed = parsePathParam(value, {
+        field: "notification id",
+        maxLength: MAX_IDENTIFIER_LENGTH,
+      });
+      if (!parsed.ok) {
+        return { ok: false, message: "Invalid notification id" };
+      }
+      ids.push(parsed.value);
+    }
+  }
+
+  if (!markAll && ids.length === 0) {
+    return { ok: false, message: "Either markAll=true or ids[] is required" };
+  }
+
+  return {
+    ok: true,
+    value: {
+      markAll,
+      ids,
     },
   };
 }
@@ -1142,6 +1289,50 @@ function parseAdminBankAccountStatusPayload(payload: unknown):
   };
 }
 
+function parseAdminWalletStatusPayload(payload: unknown):
+  | {
+      ok: true;
+      value: {
+        status: "pending" | "under_review" | "verified" | "rejected" | "inactive";
+        note?: string;
+      };
+    }
+  | { ok: false; message: string } {
+  if (!isRecord(payload)) {
+    return { ok: false, message: "Invalid request body" };
+  }
+
+  const status = typeof payload.status === "string" ? payload.status : "";
+  const note = parseOptionalMultilineText(payload.note, {
+    field: "note",
+    maxLength: MAX_NOTE_LENGTH,
+  });
+  if (!note.ok) {
+    return { ok: false, message: note.message };
+  }
+
+  if (
+    !ALLOWED_ADMIN_WALLET_STATUSES.includes(
+      status as (typeof ALLOWED_ADMIN_WALLET_STATUSES)[number],
+    )
+  ) {
+    return { ok: false, message: "status is invalid for wallet review" };
+  }
+
+  return {
+    ok: true,
+    value: {
+      status: status as
+        | "pending"
+        | "under_review"
+        | "verified"
+        | "rejected"
+        | "inactive",
+      note: note.value,
+    },
+  };
+}
+
 function getCurrentUserId(user: unknown): string | null {
   if (!user || typeof user !== "object") {
     return null;
@@ -1176,6 +1367,49 @@ const dashboardRoutes = new Hono<AppEnv>()
     },
   )
   .get(
+    "/notifications",
+    requireAuth,
+    requirePermission("dashboard.view"),
+    async (c) => {
+      const userId = getCurrentUserId(c.get("user"));
+      if (!userId) {
+        return c.json({ message: "Unauthorized" }, 401);
+      }
+
+      const page = parsePositiveInt(c.req.query("page"), 1);
+      const pageSize = parseNotificationPageSize(c.req.query("pageSize"));
+      const result = await listNotificationsForUser(userId, page, pageSize);
+
+      return c.json({
+        rows: result.rows,
+        pagination: result.pagination,
+      });
+    },
+  )
+  .patch(
+    "/notifications/read",
+    requireAuth,
+    requirePermission("dashboard.view"),
+    async (c) => {
+      const userId = getCurrentUserId(c.get("user"));
+      if (!userId) {
+        return c.json({ message: "Unauthorized" }, 401);
+      }
+
+      const payload = await c.req.json().catch(() => null);
+      const parsed = parseNotificationsReadPayload(payload);
+      if (!parsed.ok) {
+        return c.json({ message: parsed.message }, 400);
+      }
+
+      const updated = parsed.value.markAll
+        ? await markAllNotificationsAsReadForUser(userId)
+        : await markNotificationsAsReadForUser(userId, parsed.value.ids);
+
+      return c.json({ updated });
+    },
+  )
+  .get(
     "/overview",
     requireAuth,
     requirePermission("dashboard.view"),
@@ -1197,6 +1431,15 @@ const dashboardRoutes = new Hono<AppEnv>()
       });
     },
   )
+  .get(
+    "/reserve-management",
+    requireAuth,
+    requirePermission("dashboard.view"),
+    async (c) => {
+      const state = await getAdminReserveManagementState();
+      return c.json({ state });
+    },
+  )
   .post(
     "/mint-requests",
     requireAuth,
@@ -1214,8 +1457,38 @@ const dashboardRoutes = new Hono<AppEnv>()
         return c.json({ message: parsed.message }, 400);
       }
 
-      const row = await createMintRequestForUser(userId, parsed.value);
-      return c.json({ row }, 201);
+      try {
+        const row = await createMintRequestForUser(userId, parsed.value);
+        return c.json({ row }, 201);
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          error.message ===
+            DASHBOARD_REQUEST_CREATION_DOMAIN_ERRORS.kybNotVerified
+        ) {
+          return c.json(
+            {
+              message:
+                "KYB verification is required before submitting mint requests",
+            },
+            400,
+          );
+        }
+        if (
+          error instanceof Error &&
+          error.message ===
+            DASHBOARD_REQUEST_CREATION_DOMAIN_ERRORS.mintDestinationWalletNotVerified
+        ) {
+          return c.json(
+            {
+              message:
+                "Destination wallet must be one of your approved wallet addresses",
+            },
+            400,
+          );
+        }
+        throw error;
+      }
     },
   )
   .post(
@@ -1235,8 +1508,50 @@ const dashboardRoutes = new Hono<AppEnv>()
         return c.json({ message: parsed.message }, 400);
       }
 
-      const row = await createRedeemRequestForUser(userId, parsed.value);
-      return c.json({ row }, 201);
+      try {
+        const row = await createRedeemRequestForUser(userId, parsed.value);
+        return c.json({ row }, 201);
+      } catch (error) {
+        if (error instanceof Error) {
+          if (
+            error.message ===
+            DASHBOARD_REQUEST_CREATION_DOMAIN_ERRORS.kybNotVerified
+          ) {
+            return c.json(
+              {
+                message:
+                  "KYB verification is required before submitting redemption requests",
+              },
+              400,
+            );
+          }
+          if (
+            error.message ===
+            DASHBOARD_REQUEST_CREATION_DOMAIN_ERRORS.redeemBalanceNotPositive
+          ) {
+            return c.json(
+              {
+                message:
+                  "A positive wallet balance is required before submitting redemption requests",
+              },
+              400,
+            );
+          }
+          if (
+            error.message ===
+            DASHBOARD_REQUEST_CREATION_DOMAIN_ERRORS.redeemDestinationBankAccountNotVerified
+          ) {
+            return c.json(
+              {
+                message:
+                  "Destination account must be one of your verified bank accounts",
+              },
+              400,
+            );
+          }
+        }
+        throw error;
+      }
     },
   )
   .post(
@@ -1436,6 +1751,18 @@ const dashboardRoutes = new Hono<AppEnv>()
               409,
             );
           }
+          if (
+            error.message ===
+            DASHBOARD_WALLET_DOMAIN_ERRORS.addressReconnectRestricted
+          ) {
+            return c.json(
+              {
+                message:
+                  "This wallet address was rejected or deactivated and cannot be reconnected.",
+              },
+              403,
+            );
+          }
         }
         if (isUniqueViolationError(error)) {
           return c.json({ message: "Wallet already exists" }, 409);
@@ -1580,6 +1907,50 @@ const dashboardRoutes = new Hono<AppEnv>()
           error.message === DASHBOARD_ADMIN_KYB_DOMAIN_ERRORS.caseNotFound
         ) {
           return c.json({ message: "KYB case not found" }, 404);
+        }
+        throw error;
+      }
+    },
+  )
+  .post(
+    "/admin/institutions/:caseRef/disable-profile",
+    requireAuth,
+    requirePermission("dashboard.manage"),
+    requirePermission("offchain.kyc_review"),
+    async (c) => {
+      const actorUserId = getCurrentUserId(c.get("user"));
+      if (!actorUserId) {
+        return c.json({ message: "Unauthorized" }, 401);
+      }
+
+      const caseRef = parsePathParam(c.req.param("caseRef"), {
+        field: "case reference",
+        maxLength: MAX_IDENTIFIER_LENGTH,
+      });
+      if (!caseRef.ok) {
+        return c.json({ message: "Invalid case reference" }, 400);
+      }
+
+      try {
+        const row = await disableAdminInstitutionProfile(
+          actorUserId,
+          caseRef.value,
+        );
+        return c.json({ row });
+      } catch (error) {
+        if (error instanceof Error) {
+          if (
+            error.message ===
+            DASHBOARD_ADMIN_PROFILE_DOMAIN_ERRORS.customerNotFound
+          ) {
+            return c.json({ message: "Customer profile not found" }, 404);
+          }
+          if (
+            error.message ===
+            DASHBOARD_ADMIN_PROFILE_DOMAIN_ERRORS.cannotDisableSelf
+          ) {
+            return c.json({ message: "You cannot disable your own account" }, 400);
+          }
         }
         throw error;
       }
@@ -1749,6 +2120,54 @@ const dashboardRoutes = new Hono<AppEnv>()
             DASHBOARD_ADMIN_BANK_ACCOUNT_DOMAIN_ERRORS.bankAccountNotFound
         ) {
           return c.json({ message: "Bank account not found" }, 404);
+        }
+        throw error;
+      }
+    },
+  )
+  .patch(
+    "/admin/wallet/:walletAddressId/status",
+    requireAuth,
+    requirePermission("dashboard.manage"),
+    requireAnyPermission([
+      "offchain.fiat_movements",
+      "offchain.emergency",
+      "token.pause",
+    ]),
+    async (c) => {
+      const actorUserId = getCurrentUserId(c.get("user"));
+      if (!actorUserId) {
+        return c.json({ message: "Unauthorized" }, 401);
+      }
+
+      const walletAddressId = parsePathParam(c.req.param("walletAddressId"), {
+        field: "wallet address id",
+        maxLength: MAX_IDENTIFIER_LENGTH,
+      });
+      if (!walletAddressId.ok) {
+        return c.json({ message: "Invalid wallet address id" }, 400);
+      }
+
+      const payload = await c.req.json().catch(() => null);
+      const parsed = parseAdminWalletStatusPayload(payload);
+      if (!parsed.ok) {
+        return c.json({ message: parsed.message }, 400);
+      }
+
+      try {
+        const row = await updateAdminWalletStatus(
+          actorUserId,
+          walletAddressId.value,
+          parsed.value,
+        );
+        return c.json({ row });
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          error.message ===
+            DASHBOARD_ADMIN_WALLET_DOMAIN_ERRORS.walletAddressNotFound
+        ) {
+          return c.json({ message: "Wallet address not found" }, 404);
         }
         throw error;
       }
@@ -1950,6 +2369,76 @@ const dashboardRoutes = new Hono<AppEnv>()
               },
               502,
             );
+          }
+        }
+        throw error;
+      }
+    },
+  )
+  .get(
+    "/admin/permissions",
+    requireAuth,
+    requireRole(SUPER_ADMIN_ROLE_SLUG),
+    requirePermission("roles.view"),
+    async (c) => {
+      const rows = await listRbacPermissions();
+      return c.json({ rows });
+    },
+  )
+  .get(
+    "/admin/roles",
+    requireAuth,
+    requireRole(SUPER_ADMIN_ROLE_SLUG),
+    requirePermission("roles.view"),
+    async (c) => {
+      const rows = await listRbacRolesWithPermissions();
+      return c.json({ rows });
+    },
+  )
+  .patch(
+    "/admin/roles/:roleSlug/permissions",
+    requireAuth,
+    requireRole(SUPER_ADMIN_ROLE_SLUG),
+    requirePermission("roles.manage"),
+    async (c) => {
+      const roleSlug = parsePathParam(c.req.param("roleSlug"), {
+        field: "role slug",
+        maxLength: 64,
+      });
+      if (!roleSlug.ok) {
+        return c.json({ message: "Invalid role slug" }, 400);
+      }
+
+      const payload = await c.req.json().catch(() => null);
+      if (!payload || typeof payload !== "object") {
+        return c.json({ message: "Invalid request body" }, 400);
+      }
+
+      const data = payload as Record<string, unknown>;
+      const permissionKeys = parsePermissionKeys(data.permissionKeys);
+      if (!permissionKeys) {
+        return c.json({ message: "permissionKeys contains invalid values" }, 400);
+      }
+
+      try {
+        const row = await updateRolePermissionsBySlug(
+          roleSlug.value,
+          permissionKeys,
+        );
+        return c.json({ row });
+      } catch (error) {
+        if (error instanceof Error) {
+          if (error.message === RBAC_MANAGEMENT_ERRORS.roleNotFound) {
+            return c.json({ message: "Role not found" }, 404);
+          }
+          if (error.message === RBAC_MANAGEMENT_ERRORS.immutableRole) {
+            return c.json(
+              { message: "Super admin permissions cannot be modified" },
+              400,
+            );
+          }
+          if (error.message === RBAC_MANAGEMENT_ERRORS.invalidPermissionKeys) {
+            return c.json({ message: "Invalid permissionKeys provided" }, 400);
           }
         }
         throw error;

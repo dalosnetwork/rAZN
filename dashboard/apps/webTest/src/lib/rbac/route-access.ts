@@ -21,6 +21,7 @@ type DashboardRouteRule = {
   requiredPermission?: PermissionKey;
   requiredAnyPermissions?: PermissionKey[];
   allowedRoles?: RoleSlug[];
+  disallowAdmin?: boolean;
 };
 
 const DASHBOARD_ROUTE_RULES: DashboardRouteRule[] = [
@@ -78,9 +79,18 @@ const DASHBOARD_ROUTE_RULES: DashboardRouteRule[] = [
     allowedRoles: [SUPER_ADMIN_ROLE_SLUG],
   },
   { pathPrefix: "/dashboard/overview", requiredPermission: "dashboard.view" },
-  { pathPrefix: "/dashboard/mint", requiredPermission: "dashboard.view" },
+  {
+    pathPrefix: "/dashboard/mint",
+    requiredPermission: "dashboard.view",
+    disallowAdmin: true,
+  },
   { pathPrefix: "/dashboard/redeem", requiredPermission: "dashboard.view" },
   { pathPrefix: "/dashboard/kyb", requiredPermission: "dashboard.view" },
+  {
+    pathPrefix: "/dashboard/notifications",
+    requiredPermission: "dashboard.view",
+    disallowAdmin: true,
+  },
   {
     pathPrefix: "/dashboard/reserve-transparency",
     requiredPermission: "dashboard.view",
@@ -90,6 +100,10 @@ const DASHBOARD_ROUTE_RULES: DashboardRouteRule[] = [
 
 function hasRole(access: UserAccess, roleSlug: RoleSlug) {
   return access.roleSlugs.includes(roleSlug);
+}
+
+function hasAdminRole(access: UserAccess) {
+  return ADMIN_ROLE_SLUGS.some((roleSlug) => access.roleSlugs.includes(roleSlug));
 }
 
 function hasPermission(access: UserAccess, permissionKey: PermissionKey) {
@@ -149,6 +163,10 @@ export function canAccessDashboardPath(pathname: string, access: UserAccess) {
     }
   }
 
+  if (rule.disallowAdmin && hasAdminRole(access)) {
+    return false;
+  }
+
   if (rule.requiredPermission) {
     if (!hasPermission(access, rule.requiredPermission)) {
       return false;
@@ -206,7 +224,7 @@ export function filterSidebarItemsByAccess(
   items: readonly NavGroup[],
   access: UserAccess,
 ): NavGroup[] {
-  return items
+  const visibleGroups = items
     .map((group) => {
       const filteredItems = group.items
         .map((item) => filterMainItemByAccess(item, access))
@@ -218,4 +236,12 @@ export function filterSidebarItemsByAccess(
       };
     })
     .filter((group) => group.items.length > 0);
+
+  if (!hasAdminRole(access)) {
+    return visibleGroups;
+  }
+
+  return visibleGroups.filter(
+    (group) => group.labelKey !== "sidebar.group.user",
+  );
 }

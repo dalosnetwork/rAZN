@@ -61,7 +61,7 @@ Use this page as your daily starting point:
 
 ### Mint
 Use this page to create mint requests:
-1. Fill in amount, source account, payment reference, and destination wallet.
+1. Fill in amount, payment reference, and destination wallet.
 2. Add optional notes.
 3. Submit the request.
 4. Use search/filter to find previous requests.

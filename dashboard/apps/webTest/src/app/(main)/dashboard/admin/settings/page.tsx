@@ -24,6 +24,13 @@ import {
   useUpdateDashboardSettingsMutation,
 } from "@/lib/queries/dashboard";
 
+const ADMIN_NOTIFICATION_KEYS = {
+  redemptionRequest: "Redemption request",
+  mintRequests: "Mint requests",
+  userRegistrations: "User registrations",
+  securityAlerts: "Security alerts",
+} as const;
+
 export default function Page() {
   const { tt } = useI18n();
   const dashboardStateQuery = useDashboardStateQuery();
@@ -36,9 +43,10 @@ export default function Page() {
   });
 
   const [notifications, setNotifications] = React.useState({
-    opsAlerts: true,
+    redemptionRequest: true,
+    mintRequests: true,
+    userRegistrations: true,
     securityAlerts: true,
-    dailyDigest: false,
   });
 
   const [preference, setPreference] = React.useState({
@@ -65,20 +73,22 @@ export default function Page() {
       phone: state.settingsProfile.contactPhone,
     });
     setNotifications({
-      opsAlerts:
+      redemptionRequest:
         state.settingsNotificationPreferences.find(
-          (entry) =>
-            entry.label === "Operations alerts" || entry.label === "Ops alerts",
+          (entry) => entry.label === ADMIN_NOTIFICATION_KEYS.redemptionRequest,
+        )?.enabled ?? true,
+      mintRequests:
+        state.settingsNotificationPreferences.find(
+          (entry) => entry.label === ADMIN_NOTIFICATION_KEYS.mintRequests,
+        )?.enabled ?? true,
+      userRegistrations:
+        state.settingsNotificationPreferences.find(
+          (entry) => entry.label === ADMIN_NOTIFICATION_KEYS.userRegistrations,
         )?.enabled ?? true,
       securityAlerts:
         state.settingsNotificationPreferences.find(
-          (entry) => entry.label === "Security alerts",
+          (entry) => entry.label === ADMIN_NOTIFICATION_KEYS.securityAlerts,
         )?.enabled ?? true,
-      dailyDigest:
-        state.settingsNotificationPreferences.find(
-          (entry) =>
-            entry.label === "Daily digest" || entry.label === "Weekly digest",
-        )?.enabled ?? false,
     });
     setPreference({
       timezone: state.settingsProfile.timezone || "UTC",
@@ -109,19 +119,24 @@ export default function Page() {
       await updateSettingsMutation.mutateAsync({
         notificationPreferences: [
           {
-            preferenceKey: "Operations alerts",
+            preferenceKey: ADMIN_NOTIFICATION_KEYS.redemptionRequest,
             channel: "email",
-            enabled: notifications.opsAlerts,
+            enabled: notifications.redemptionRequest,
           },
           {
-            preferenceKey: "Security alerts",
+            preferenceKey: ADMIN_NOTIFICATION_KEYS.mintRequests,
+            channel: "email",
+            enabled: notifications.mintRequests,
+          },
+          {
+            preferenceKey: ADMIN_NOTIFICATION_KEYS.userRegistrations,
+            channel: "email",
+            enabled: notifications.userRegistrations,
+          },
+          {
+            preferenceKey: ADMIN_NOTIFICATION_KEYS.securityAlerts,
             channel: "email",
             enabled: notifications.securityAlerts,
-          },
-          {
-            preferenceKey: "Daily digest",
-            channel: "email",
-            enabled: notifications.dailyDigest,
           },
         ],
       });
@@ -211,8 +226,8 @@ export default function Page() {
       </MvpSectionCard>
 
       <MvpSectionCard
-        title={tt("Notifications")}
-        description={tt("Choose which alerts and updates you receive.")}
+        title={tt("Security notifications")}
+        description={tt("Choose which operational and security emails are sent to admin users.")}
         action={
           <Button variant="outline" onClick={saveNotifications}>
             {tt("Save changes")}
@@ -222,17 +237,53 @@ export default function Page() {
         <div className="space-y-4 text-sm">
           <label className="flex items-center justify-between gap-3 rounded-md border p-3">
             <div>
-              <p className="font-medium">{tt("Operations alerts")}</p>
+              <p className="font-medium">{tt("Redemption request")}</p>
               <p className="text-muted-foreground text-xs">
-                {tt("Mint, redeem, and wallet workflow alerts")}
+                {tt("Email when a new redemption request is submitted")}
               </p>
             </div>
             <Switch
-              checked={notifications.opsAlerts}
+              checked={notifications.redemptionRequest}
               onCheckedChange={(checked) =>
                 setNotifications((previous) => ({
                   ...previous,
-                  opsAlerts: checked,
+                  redemptionRequest: checked,
+                }))
+              }
+            />
+          </label>
+
+          <label className="flex items-center justify-between gap-3 rounded-md border p-3">
+            <div>
+              <p className="font-medium">{tt("Mint requests")}</p>
+              <p className="text-muted-foreground text-xs">
+                {tt("Email when a new mint request is submitted")}
+              </p>
+            </div>
+            <Switch
+              checked={notifications.mintRequests}
+              onCheckedChange={(checked) =>
+                setNotifications((previous) => ({
+                  ...previous,
+                  mintRequests: checked,
+                }))
+              }
+            />
+          </label>
+
+          <label className="flex items-center justify-between gap-3 rounded-md border p-3">
+            <div>
+              <p className="font-medium">{tt("User registrations")}</p>
+              <p className="text-muted-foreground text-xs">
+                {tt("Email when a new user completes registration")}
+              </p>
+            </div>
+            <Switch
+              checked={notifications.userRegistrations}
+              onCheckedChange={(checked) =>
+                setNotifications((previous) => ({
+                  ...previous,
+                  userRegistrations: checked,
                 }))
               }
             />
@@ -242,7 +293,7 @@ export default function Page() {
             <div>
               <p className="font-medium">{tt("Security alerts")}</p>
               <p className="text-muted-foreground text-xs">
-                {tt("Critical access, role, and policy changes")}
+                {tt("Email for critical access, role, and policy incidents")}
               </p>
             </div>
             <Switch
@@ -251,24 +302,6 @@ export default function Page() {
                 setNotifications((previous) => ({
                   ...previous,
                   securityAlerts: checked,
-                }))
-              }
-            />
-          </label>
-
-          <label className="flex items-center justify-between gap-3 rounded-md border p-3">
-            <div>
-              <p className="font-medium">{tt("Daily digest")}</p>
-              <p className="text-muted-foreground text-xs">
-                {tt("Daily summary of admin activity")}
-              </p>
-            </div>
-            <Switch
-              checked={notifications.dailyDigest}
-              onCheckedChange={(checked) =>
-                setNotifications((previous) => ({
-                  ...previous,
-                  dailyDigest: checked,
                 }))
               }
             />

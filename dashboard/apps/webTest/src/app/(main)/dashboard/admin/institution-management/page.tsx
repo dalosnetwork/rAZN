@@ -42,10 +42,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { getAdminInstitutionDocumentDownloadUrl } from "@/lib/api/dashboard";
 import { useMeQuery } from "@/lib/queries/auth";
 import {
+  useDisableAdminInstitutionProfileMutation,
   useUpdateAdminBankAccountStatusMutation,
   useAdminInstitutionsQuery,
   useUpdateAdminInstitutionDocumentStatusMutation,
   useUpdateAdminInstitutionStatusMutation,
+  useUpdateAdminWalletStatusMutation,
 } from "@/lib/queries/dashboard";
 import { hasAccessPermission } from "@/lib/rbac/route-access";
 
@@ -129,10 +131,17 @@ export default function Page() {
   const updateDocumentStatusMutation =
     useUpdateAdminInstitutionDocumentStatusMutation();
   const updateBankAccountStatusMutation = useUpdateAdminBankAccountStatusMutation();
+  const updateWalletStatusMutation = useUpdateAdminWalletStatusMutation();
+  const disableInstitutionProfileMutation =
+    useDisableAdminInstitutionProfileMutation();
   const canManageBankApprovals = hasAccessPermission(
     meQuery.data?.access,
     "offchain.fiat_movements",
   );
+  const canManageWalletApprovals =
+    hasAccessPermission(meQuery.data?.access, "offchain.fiat_movements") ||
+    hasAccessPermission(meQuery.data?.access, "offchain.emergency") ||
+    hasAccessPermission(meQuery.data?.access, "token.pause");
   const cases = React.useMemo<KybReviewCase[]>(
     () => (adminInstitutionsQuery.data as KybReviewCase[] | undefined) ?? [],
     [adminInstitutionsQuery.data],
@@ -248,6 +257,27 @@ export default function Page() {
     }
   }
 
+  async function updateWalletStatus(
+    walletAddressId: string,
+    status: "pending" | "under_review" | "verified" | "rejected" | "inactive",
+  ) {
+    const note = draftNote.trim() || undefined;
+
+    try {
+      await updateWalletStatusMutation.mutateAsync({
+        walletAddressId,
+        status,
+        note,
+      });
+      await adminInstitutionsQuery.refetch();
+      toast.success(tt("Wallet status updated."));
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : tt("Could not update wallet."),
+      );
+    }
+  }
+
   async function updateDocumentStatus(
     caseRef: string,
     documentId: string,
@@ -269,6 +299,33 @@ export default function Page() {
         error instanceof Error
           ? error.message
           : tt("Could not update document review."),
+      );
+    }
+  }
+
+  async function disableInstitutionProfile(caseRef: string) {
+    const confirmed = window.confirm(
+      tt(
+        "Disable this profile? This will revoke all active sessions and remove password login access.",
+      ),
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      await disableInstitutionProfileMutation.mutateAsync({ caseRef });
+      await adminInstitutionsQuery.refetch();
+      setSelectedCaseId(null);
+      setDraftNote("");
+      toast.success(
+        tt("Customer profile disabled. Active sessions revoked and password access removed."),
+      );
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : tt("Could not disable customer profile."),
       );
     }
   }
@@ -335,6 +392,31 @@ export default function Page() {
     }
     return [];
   }, [selectedCase]);
+
+  const selectedCaseWalletAccounts = React.useMemo(() => {
+    if (!selectedCase) {
+      return [];
+    }
+    if (selectedCase.walletAccounts.length > 0) {
+      return selectedCase.walletAccounts;
+    }
+    if (selectedCase.walletDetails.walletAddress !== "-") {
+      return [
+        {
+          walletAddressId: "",
+          label: tt("Linked wallet"),
+          walletAddress: selectedCase.walletDetails.walletAddress,
+          network: selectedCase.walletDetails.network,
+          walletProvider: selectedCase.walletDetails.walletProvider,
+          verificationStatus: "pending" as const,
+          connectionStatus: "connected" as const,
+          addedAt: selectedCase.registrationDate,
+          isPrimary: true,
+        },
+      ];
+    }
+    return [];
+  }, [selectedCase, tt]);
 
   return (
     <div className="@container/main flex flex-col gap-4 md:gap-6">
@@ -458,6 +540,15 @@ export default function Page() {
                 disabled={updateInstitutionStatusMutation.isPending}
               >
                 {tt("Reject")}
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={() =>
+                  void disableInstitutionProfile(selectedCase.customerId)
+                }
+                disabled={disableInstitutionProfileMutation.isPending}
+              >
+                {tt("Disable profile")}
               </Button>
             </div>
           ) : null
@@ -617,29 +708,100 @@ export default function Page() {
                   <p className="font-medium text-xs uppercase tracking-wide text-muted-foreground">
                     {tt("Wallet details")}
                   </p>
-                  <p>
-                    <span className="text-muted-foreground">
-                      {tt("Network")}:
-                    </span>{" "}
-                    {selectedCase.walletDetails.network}
+                  <p className="text-muted-foreground text-xs">
+                    {tt("Linked wallets")}: {selectedCaseWalletAccounts.length}
                   </p>
-                  <p>
-                    <span className="text-muted-foreground">
-                      {tt("Wallet address")}:
-                    </span>{" "}
-                    <span
-                      className="font-mono text-xs"
-                      title={selectedCase.walletDetails.walletAddress}
-                    >
-                      {truncateMiddle(selectedCase.walletDetails.walletAddress)}
-                    </span>
-                  </p>
-                  <p>
-                    <span className="text-muted-foreground">
-                      {tt("Provider")}:
-                    </span>{" "}
-                    {selectedCase.walletDetails.walletProvider}
-                  </p>
+                  {selectedCaseWalletAccounts.length > 0 ? (
+                    <div className="space-y-2 pt-1">
+                      {selectedCaseWalletAccounts.map((wallet) => (
+                        <div
+                          key={`${wallet.walletAddressId || wallet.walletAddress}-${wallet.network}`}
+                          className="rounded-md border bg-background/60 p-2 text-sm"
+                        >
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <p className="font-medium">
+                              {wallet.label}
+                              {wallet.isPrimary ? (
+                                <span className="ml-2 text-muted-foreground text-xs">
+                                  ({tt("Primary wallet")})
+                                </span>
+                              ) : null}
+                            </p>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <StatusBadge status={wallet.connectionStatus} />
+                              <StatusBadge status={wallet.verificationStatus} />
+                            </div>
+                          </div>
+                          <p>
+                            <span className="text-muted-foreground">
+                              {tt("Wallet address")}:
+                            </span>{" "}
+                            <span
+                              className="font-mono text-xs"
+                              title={wallet.walletAddress}
+                            >
+                              {truncateMiddle(wallet.walletAddress)}
+                            </span>
+                          </p>
+                          <p>
+                            <span className="text-muted-foreground">
+                              {tt("Network")}:
+                            </span>{" "}
+                            {wallet.network}
+                          </p>
+                          <p>
+                            <span className="text-muted-foreground">
+                              {tt("Provider")}:
+                            </span>{" "}
+                            {wallet.walletProvider}
+                          </p>
+                          <p>
+                            <span className="text-muted-foreground">{tt("Added")}:</span>{" "}
+                            {formatDateTime(wallet.addedAt)}
+                          </p>
+                          <div className="flex flex-wrap gap-2 pt-2">
+                            <Button
+                              size="sm"
+                              disabled={
+                                !wallet.walletAddressId ||
+                                !canManageWalletApprovals ||
+                                updateWalletStatusMutation.isPending
+                              }
+                              onClick={() =>
+                                void updateWalletStatus(
+                                  wallet.walletAddressId,
+                                  "verified",
+                                )
+                              }
+                            >
+                              {tt("Approve wallet")}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={
+                                !wallet.walletAddressId ||
+                                !canManageWalletApprovals ||
+                                updateWalletStatusMutation.isPending
+                              }
+                              onClick={() =>
+                                void updateWalletStatus(
+                                  wallet.walletAddressId,
+                                  "rejected",
+                                )
+                              }
+                            >
+                              {tt("Reject wallet")}
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-muted-foreground text-xs pt-2">
+                      {tt("No linked wallet found for this customer.")}
+                    </p>
+                  )}
                 </div>
               </div>
             </div>

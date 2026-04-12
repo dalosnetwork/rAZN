@@ -117,6 +117,17 @@ export type KybReviewCase = {
     country: string;
     currency: string;
   }[];
+  walletAccounts: {
+    walletAddressId: string;
+    label: string;
+    walletAddress: string;
+    network: string;
+    walletProvider: string;
+    verificationStatus: MvpStatus;
+    connectionStatus: MvpStatus;
+    addedAt: string;
+    isPrimary: boolean;
+  }[];
   walletDetails: {
     network: string;
     walletAddress: string;

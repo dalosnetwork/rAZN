@@ -38,6 +38,8 @@ export type DashboardStatePayload = {
     accountHolder: string;
     bankName: string;
     ibanMasked: string;
+    accountNumberMasked: string;
+    bankAddress: string;
     swiftCode: string;
     country: string;
     currency: string;
@@ -66,6 +68,44 @@ type DashboardStateResponse = {
 
 type DashboardOpsQueueResponse = {
   rows?: OpsQueueItem[];
+};
+
+export type DashboardNotification = {
+  id: string;
+  category:
+    | "mint"
+    | "redeem"
+    | "kyb"
+    | "wallet"
+    | "bank_account"
+    | "security"
+    | "system";
+  title: string;
+  message: string;
+  channel: "email" | "in_app" | "sms";
+  status: MvpStatus;
+  entityType?: string;
+  entityRef?: string;
+  isRead: boolean;
+  readAt?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type DashboardNotificationsPayload = {
+  rows: DashboardNotification[];
+  pagination: {
+    page: number;
+    pageSize: number;
+    total: number;
+    totalPages: number;
+    unreadCount: number;
+  };
+};
+
+type DashboardNotificationsResponse = {
+  rows?: DashboardNotification[];
+  pagination?: DashboardNotificationsPayload["pagination"];
 };
 
 export type AdminOverviewState = {
@@ -125,6 +165,17 @@ export type AdminInstitutionCase = {
     country: string;
     currency: string;
   }[];
+  walletAccounts: {
+    walletAddressId: string;
+    label: string;
+    walletAddress: string;
+    network: string;
+    walletProvider: string;
+    verificationStatus: MvpStatus;
+    connectionStatus: MvpStatus;
+    addedAt: string;
+    isPrimary: boolean;
+  }[];
   walletDetails: {
     network: string;
     walletAddress: string;
@@ -175,6 +226,8 @@ export type AdminReserveManagementState = {
   }[];
   liquidReserves: number;
 };
+
+export type ReserveManagementState = AdminReserveManagementState;
 
 export type AdminWalletState = {
   wallets: {
@@ -271,6 +324,8 @@ export type CreateBankAccountInput = {
   accountHolder: string;
   bankName: string;
   ibanMasked: string;
+  accountNumberMasked: string;
+  bankAddress: string;
   swiftCode?: string;
   country: string;
   currency: string;
@@ -325,6 +380,10 @@ export type UpdateAdminInstitutionStatusInput = {
   note?: string;
 };
 
+export type DisableAdminInstitutionProfileInput = {
+  caseRef: string;
+};
+
 export type UploadKybDocumentInput = {
   documentId: string;
   file: File;
@@ -339,6 +398,12 @@ export type UpdateAdminInstitutionDocumentStatusInput = {
 
 export type UpdateAdminBankAccountStatusInput = {
   bankAccountId: string;
+  status: "pending" | "under_review" | "verified" | "rejected" | "inactive";
+  note?: string;
+};
+
+export type UpdateAdminWalletStatusInput = {
+  walletAddressId: string;
   status: "pending" | "under_review" | "verified" | "rejected" | "inactive";
   note?: string;
 };
@@ -361,6 +426,66 @@ export async function getDashboardState(): Promise<DashboardStatePayload> {
   }
 
   return payload.state;
+}
+
+export async function getDashboardNotifications(input: {
+  page: number;
+  pageSize: number;
+}): Promise<DashboardNotificationsPayload> {
+  const query = new URLSearchParams({
+    page: String(input.page),
+    pageSize: String(input.pageSize),
+  }).toString();
+  const response = await fetch(`/api/dashboard/notifications?${query}`, {
+    method: "GET",
+    credentials: "include",
+    cache: "no-store",
+  });
+
+  const payload = await parseJson<
+    ApiErrorPayload & DashboardNotificationsResponse
+  >(response);
+
+  if (!response.ok || !payload.rows || !payload.pagination) {
+    throw new Error(
+      getErrorMessage(payload, "Failed to fetch notifications"),
+    );
+  }
+
+  return {
+    rows: payload.rows,
+    pagination: payload.pagination,
+  };
+}
+
+export async function markDashboardNotificationsRead(input: {
+  markAll?: boolean;
+  ids?: string[];
+}) {
+  const response = await fetch("/api/dashboard/notifications", {
+    method: "PATCH",
+    credentials: "include",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      markAll: Boolean(input.markAll),
+      ids: input.ids ?? [],
+    }),
+  });
+
+  const payload = await parseJson<ApiErrorPayload & { updated?: number }>(
+    response,
+  );
+  if (!response.ok) {
+    throw new Error(
+      getErrorMessage(payload, "Failed to update notification state"),
+    );
+  }
+
+  return {
+    updated: Number(payload.updated ?? 0),
+  };
 }
 
 export async function createMintRequest(input: CreateMintRequestInput) {
@@ -639,6 +764,29 @@ export async function updateAdminInstitutionStatus(
   return payload.row;
 }
 
+export async function disableAdminInstitutionProfile(
+  input: DisableAdminInstitutionProfileInput,
+) {
+  const response = await fetch(
+    `/api/dashboard/admin/institutions/${encodeURIComponent(input.caseRef)}/disable-profile`,
+    {
+      method: "POST",
+      credentials: "include",
+    },
+  );
+
+  const payload = await parseJson<ApiErrorPayload & { row?: unknown }>(
+    response,
+  );
+  if (!response.ok) {
+    throw new Error(
+      getErrorMessage(payload, "Failed to disable customer profile"),
+    );
+  }
+
+  return payload.row;
+}
+
 export async function updateAdminInstitutionDocumentStatus(
   input: UpdateAdminInstitutionDocumentStatusInput,
 ) {
@@ -706,6 +854,36 @@ export async function updateAdminBankAccountStatus(
   return payload.row;
 }
 
+export async function updateAdminWalletStatus(
+  input: UpdateAdminWalletStatusInput,
+) {
+  const response = await fetch(
+    `/api/dashboard/admin/wallet/${encodeURIComponent(input.walletAddressId)}/status`,
+    {
+      method: "PATCH",
+      credentials: "include",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        status: input.status,
+        note: input.note,
+      }),
+    },
+  );
+
+  const payload = await parseJson<ApiErrorPayload & { row?: unknown }>(
+    response,
+  );
+  if (!response.ok) {
+    throw new Error(
+      getErrorMessage(payload, "Failed to update wallet status"),
+    );
+  }
+
+  return payload.row;
+}
+
 export async function getAdminReserveManagementState(): Promise<AdminReserveManagementState> {
   const response = await fetch("/api/dashboard/admin/reserve-management", {
     method: "GET",
@@ -715,6 +893,26 @@ export async function getAdminReserveManagementState(): Promise<AdminReserveMana
 
   const payload = await parseJson<
     ApiErrorPayload & { state?: AdminReserveManagementState }
+  >(response);
+
+  if (!response.ok || !payload.state) {
+    throw new Error(
+      getErrorMessage(payload, "Failed to fetch reserve management state"),
+    );
+  }
+
+  return payload.state;
+}
+
+export async function getReserveManagementState(): Promise<ReserveManagementState> {
+  const response = await fetch("/api/dashboard/reserve-management", {
+    method: "GET",
+    credentials: "include",
+    cache: "no-store",
+  });
+
+  const payload = await parseJson<
+    ApiErrorPayload & { state?: ReserveManagementState }
   >(response);
 
   if (!response.ok || !payload.state) {

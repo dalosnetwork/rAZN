@@ -12,6 +12,7 @@
     "start": "tsx src/index.ts",
     "test": "node --import tsx/esm --test src/**/*.test.ts",
     "worker:example": "tsx src/jobs/workers/example.worker.ts",
+    "worker:reserve-snapshot": "tsx src/jobs/workers/reserve-snapshot.worker.ts",
     "seed:rbac": "tsx src/scripts/seed-rbac.ts",
     "preflight:dashboard-integrity": "tsx src/scripts/preflight-dashboard-integrity.ts",
     "check-types": "tsc --noEmit"

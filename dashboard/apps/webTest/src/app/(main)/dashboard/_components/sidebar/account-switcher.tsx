@@ -1,6 +1,6 @@
 "use client";
 
-import { BadgeCheck, Bell, CreditCard, LogOut } from "lucide-react";
+import { Settings2, Bell, LogOut } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
@@ -66,15 +66,11 @@ export function AccountSwitcher() {
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
-          <DropdownMenuItem>
-            <BadgeCheck />
-            {t("user.account")}
+          <DropdownMenuItem onSelect={() => router.push("/dashboard/settings")}>
+            <Settings2 />
+            {t("sidebar.item.settings")}
           </DropdownMenuItem>
-          <DropdownMenuItem>
-            <CreditCard />
-            {t("user.billing")}
-          </DropdownMenuItem>
-          <DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => router.push("/dashboard/notifications")}>
             <Bell />
             {t("user.notifications")}
           </DropdownMenuItem>

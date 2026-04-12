@@ -1,4 +1,10 @@
-import { roleTable, userRoleTable, userTable } from "@repo/db";
+import {
+  accountTable,
+  roleTable,
+  sessionTable,
+  userRoleTable,
+  userTable,
+} from "@repo/db";
 import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 
 import { db } from "./db";
@@ -310,14 +316,53 @@ export async function updateUserWithRoles(
 }
 
 export async function softDeleteUser(userId: string): Promise<boolean> {
-  const rows = await db
-    .update(userTable)
-    .set({
-      deletedAt: new Date(),
-      updatedAt: new Date(),
-    })
-    .where(and(eq(userTable.id, userId), isNull(userTable.deletedAt)))
-    .returning({ id: userTable.id });
+  const result = await disableUserAccess(userId);
+  return result.disabled;
+}
 
-  return rows.length > 0;
+export async function disableUserAccess(userId: string): Promise<{
+  disabled: boolean;
+  sessionsRevoked: number;
+  credentialsCleared: number;
+}> {
+  return db.transaction(async (tx) => {
+    const now = new Date();
+    const [disabledUser] = await tx
+      .update(userTable)
+      .set({
+        deletedAt: now,
+        updatedAt: now,
+      })
+      .where(and(eq(userTable.id, userId), isNull(userTable.deletedAt)))
+      .returning({ id: userTable.id });
+
+    if (!disabledUser) {
+      return {
+        disabled: false,
+        sessionsRevoked: 0,
+        credentialsCleared: 0,
+      };
+    }
+
+    const [revokedSessions, clearedAccounts] = await Promise.all([
+      tx
+        .delete(sessionTable)
+        .where(eq(sessionTable.userId, userId))
+        .returning({ id: sessionTable.id }),
+      tx
+        .update(accountTable)
+        .set({
+          password: null,
+          updatedAt: now,
+        })
+        .where(eq(accountTable.userId, userId))
+        .returning({ id: accountTable.id }),
+    ]);
+
+    return {
+      disabled: true,
+      sessionsRevoked: revokedSessions.length,
+      credentialsCleared: clearedAccounts.length,
+    };
+  });
 }

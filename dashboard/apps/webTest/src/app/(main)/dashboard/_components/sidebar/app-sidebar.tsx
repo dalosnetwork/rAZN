@@ -24,7 +24,10 @@ import {
 } from "@/components/ui/sidebar";
 import { APP_CONFIG } from "@/config/app-config";
 import { useMeQuery } from "@/lib/queries/auth";
-import { filterSidebarItemsByAccess } from "@/lib/rbac/route-access";
+import {
+  canManageDashboard,
+  filterSidebarItemsByAccess,
+} from "@/lib/rbac/route-access";
 import { sidebarItems } from "@/navigation/sidebar/sidebar-items";
 import { usePreferencesStore } from "@/stores/preferences/preferences-provider";
 
@@ -82,6 +85,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const meQuery = useMeQuery();
   const access = meQuery.data?.access ?? { roleSlugs: [], permissionKeys: [] };
   const filteredSidebarItems = filterSidebarItemsByAccess(sidebarItems, access);
+  const dashboardHomeHref = canManageDashboard(access)
+    ? "/dashboard/admin/overview"
+    : "/dashboard/overview";
 
   return (
     <Sidebar {...props} variant={variant} collapsible={collapsible}>
@@ -89,7 +95,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton asChild>
-              <Link prefetch={false} href="/dashboard/overview">
+              <Link prefetch={false} href={dashboardHomeHref}>
                 <Command />
                 <span className="font-semibold text-base">
                   {APP_CONFIG.name}

@@ -41,6 +41,28 @@ export type DashboardUsersResponse = {
   success?: boolean;
 };
 
+export type DashboardPermission = {
+  key: string;
+  name: string;
+  description: string | null;
+};
+
+export type DashboardRole = {
+  slug: string;
+  name: string;
+  description: string | null;
+  permissionKeys: string[];
+};
+
+type DashboardPermissionsResponse = {
+  rows?: DashboardPermission[];
+};
+
+type DashboardRolesResponse = {
+  rows?: DashboardRole[];
+  row?: DashboardRole;
+};
+
 function getErrorMessage(payload: ApiErrorPayload | null, fallback: string) {
   return payload?.error?.message ?? payload?.message ?? fallback;
 }
@@ -146,4 +168,66 @@ export async function disableDashboardUser(userId: string): Promise<boolean> {
   }
 
   return payload.success ?? true;
+}
+
+export async function getDashboardPermissions(): Promise<DashboardPermission[]> {
+  const response = await fetch("/api/dashboard/admin/permissions", {
+    method: "GET",
+    credentials: "include",
+    cache: "no-store",
+  });
+
+  const payload = await parseJson<
+    ApiErrorPayload & DashboardPermissionsResponse
+  >(response);
+  if (!response.ok) {
+    throw new Error(getErrorMessage(payload, "Failed to fetch permissions"));
+  }
+
+  return payload.rows ?? [];
+}
+
+export async function getDashboardRoles(): Promise<DashboardRole[]> {
+  const response = await fetch("/api/dashboard/admin/roles", {
+    method: "GET",
+    credentials: "include",
+    cache: "no-store",
+  });
+
+  const payload = await parseJson<ApiErrorPayload & DashboardRolesResponse>(
+    response,
+  );
+  if (!response.ok) {
+    throw new Error(getErrorMessage(payload, "Failed to fetch roles"));
+  }
+
+  return payload.rows ?? [];
+}
+
+export async function updateDashboardRolePermissions(
+  roleSlug: string,
+  input: {
+    permissionKeys: string[];
+  },
+): Promise<DashboardRole> {
+  const response = await fetch(
+    `/api/dashboard/admin/roles/${encodeURIComponent(roleSlug)}/permissions`,
+    {
+      method: "PATCH",
+      credentials: "include",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(input),
+    },
+  );
+
+  const payload = await parseJson<ApiErrorPayload & DashboardRolesResponse>(
+    response,
+  );
+  if (!response.ok || !payload.row) {
+    throw new Error(getErrorMessage(payload, "Failed to update role permissions"));
+  }
+
+  return payload.row;
 }

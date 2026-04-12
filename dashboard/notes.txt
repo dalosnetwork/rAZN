@@ -2,9 +2,61 @@
 
 ->grafik listesi 
 
-
-tıkladığında charta scroll
-also 
-
-
 Upgrades: Proxy pattern for contract updates??
+
+
+-shafiq notes;
+
+user dashboardu adminden sil;
+
+In the mint request section, what exactly is the primary settlement and secondary treasury account?
+bu fieldı sil;
+done.
+
+For users redeeming:
+1- Users should not be able to submit a redemption request if their balance is zero.
+2- Users should not be able to submit a redemption request if their KYB status is not verified. (same for minting as well)
+3- The destination account for the redemption should be a drop down list of the user's already added and approved bank account.
+done.
+
+
+on the balance fetch the token balance and put there;
+done;
+
+In the bank section, we should have an "Account number" and "Bank address" field as well;
+done.
+
+change user and admins security setting section
+Okay, for users we do the following notifications or emails:
+- Redemption approved
+- Mint approved
+- KYB approved
+For admin:
+- redemption request
+- mint requests
+- user registrations
+- security alerts
+done. but not dynamic (real)
+
+User sees "unauthorized" and clicking it opens an unauthorized error page. 
+done.
+
+Notifications doesn't open anything. We should have a notification function so users are notified when their KYB status is updated, documents requested, redemption or minting is approved, etc.
+done.
+
+Billings doesn't open anything either. It isn't needed anyway, so we have to remove it.
+done.
+
+clicking on Account opens the same unauthorized page
+done.
+
+When user adds wallet, it doesn't show here for the admin to approve.
+done.
+
+The user's redemption section should have the redeeming amount as tokens, not USD. We must link the price of the token to it so the user has an understanding of the value, but the redemption should be of the token
+
+Do we have the option to disable a user's profile? This ss is from the institution management when you open their details
+done. 
+
+The admin roles are predefined. Is it possible to edit the roles via a defined policy list and we simply attach/detach policies from each role?
+done.

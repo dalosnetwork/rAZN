@@ -15,6 +15,7 @@ import {
   sessionTable,
   sessionMetadataTable,
   userDashboardPreferencesTable,
+  userNotificationsTable,
   userNotificationPreferencesTable,
   userProfileSettingsTable,
   userTable,
@@ -26,6 +27,7 @@ import { and, asc, desc, eq, inArray, isNull, not, or } from "drizzle-orm";
 import { db } from "./db";
 import { saveKybPdfFile } from "./kyb-file-storage";
 import {
+  getTokenBalancesOnBscTestnet,
   isAddressLike,
   toChecksumAddress,
   verifyMintApprovalTx,
@@ -80,6 +82,52 @@ function requireInserted<T>(row: T | undefined, message: string): T {
   return row;
 }
 
+async function insertUserNotification(input: {
+  userId: string;
+  category: "mint" | "redeem" | "kyb" | "wallet" | "bank_account" | "system";
+  title: string;
+  message: string;
+  status:
+    | "active"
+    | "connected"
+    | "pending"
+    | "under_review"
+    | "approved"
+    | "verified"
+    | "rejected"
+    | "completed"
+    | "blocked"
+    | "inactive"
+    | "warning"
+    | "stale"
+    | "critical"
+    | "draft"
+    | "submitted"
+    | "queued"
+    | "processing"
+    | "not_started"
+    | "in_progress"
+    | "needs_update";
+  entityType?: string;
+  entityRef?: string;
+}) {
+  const now = new Date();
+  await db.insert(userNotificationsTable).values({
+    userId: input.userId,
+    category: input.category,
+    title: input.title,
+    message: input.message,
+    channel: "in_app",
+    eventStatus: input.status,
+    entityType: input.entityType ?? null,
+    entityRef: input.entityRef ?? null,
+    isRead: false,
+    readAt: null,
+    createdAt: now,
+    updatedAt: now,
+  });
+}
+
 function isMintOpenStatus(status: string) {
   return (
     status === "submitted" || status === "under_review" || status === "approved"
@@ -107,10 +155,39 @@ function normalizeWalletNetwork(value: string) {
   return value.trim();
 }
 
+function isBscTestnetNetwork(value: string | null | undefined) {
+  if (!value) {
+    return false;
+  }
+  const normalized = value.trim().toLowerCase();
+  return (
+    normalized.includes("bsc") ||
+    normalized.includes("bnb") ||
+    normalized.includes("binance") ||
+    normalized.includes("chain 97") ||
+    normalized.includes("97")
+  );
+}
+
+function isWalletReconnectRestrictedStatus(status: string | null | undefined) {
+  return status === "rejected" || status === "inactive";
+}
+
+function isWalletBalanceVisible(input: {
+  verificationStatus: string | null | undefined;
+  connectionStatus: string | null | undefined;
+}) {
+  if (input.connectionStatus !== "connected") {
+    return false;
+  }
+  return !isWalletReconnectRestrictedStatus(input.verificationStatus);
+}
+
 export const DASHBOARD_WALLET_DOMAIN_ERRORS = {
   connectionOwnershipConflict: "WALLET_CONNECTION_OWNERSHIP_CONFLICT",
   addressOwnershipConflict: "WALLET_ADDRESS_OWNERSHIP_CONFLICT",
   addressNotFound: "WALLET_ADDRESS_NOT_FOUND",
+  addressReconnectRestricted: "WALLET_ADDRESS_RECONNECT_RESTRICTED",
   invalidConnectInput: "WALLET_INVALID_CONNECT_INPUT",
   invalidDisconnectInput: "WALLET_INVALID_DISCONNECT_INPUT",
   invalidPrimarySelectionInput: "WALLET_INVALID_PRIMARY_SELECTION_INPUT",
@@ -129,6 +206,126 @@ export const DASHBOARD_KYB_DOCUMENT_DOMAIN_ERRORS = {
   documentNotFound: "KYB_DOCUMENT_NOT_FOUND",
   invalidUpload: "KYB_DOCUMENT_INVALID_UPLOAD",
 } as const;
+
+export const DASHBOARD_REQUEST_CREATION_DOMAIN_ERRORS = {
+  kybNotVerified: "REQUEST_CREATION_KYB_NOT_VERIFIED",
+  mintDestinationWalletNotVerified:
+    "REQUEST_CREATION_MINT_DESTINATION_WALLET_NOT_VERIFIED",
+  redeemBalanceNotPositive: "REQUEST_CREATION_REDEEM_BALANCE_NOT_POSITIVE",
+  redeemDestinationBankAccountNotVerified:
+    "REQUEST_CREATION_REDEEM_DESTINATION_BANK_ACCOUNT_NOT_VERIFIED",
+} as const;
+
+function isKybApproved(status: string | null | undefined) {
+  return status === "approved";
+}
+
+async function assertKybApprovedForUser(userId: string) {
+  const [latestKybCase] = await db
+    .select({
+      status: kybCasesTable.status,
+    })
+    .from(kybCasesTable)
+    .where(eq(kybCasesTable.userId, userId))
+    .orderBy(desc(kybCasesTable.submittedAt))
+    .limit(1);
+
+  if (!isKybApproved(latestKybCase?.status)) {
+    throw new Error(DASHBOARD_REQUEST_CREATION_DOMAIN_ERRORS.kybNotVerified);
+  }
+}
+
+async function getRedeemableBalanceForUser(userId: string) {
+  const walletAddresses = await db
+    .select({
+      address: managedWalletAddressesTable.address,
+      network: managedWalletAddressesTable.network,
+      type: managedWalletAddressesTable.type,
+      verificationStatus: managedWalletAddressesTable.verificationStatus,
+      connectionStatus: managedWalletAddressesTable.connectionStatus,
+      balance: managedWalletAddressesTable.balance,
+    })
+    .from(managedWalletAddressesTable)
+    .where(eq(managedWalletAddressesTable.userId, userId));
+
+  const primaryWallet = walletAddresses.find(
+    (row) =>
+      row.type === "primary" &&
+      row.connectionStatus === "connected" &&
+      row.verificationStatus === "verified",
+  );
+
+  if (!primaryWallet) {
+    return 0;
+  }
+
+  const fallbackBalance = toNumber(primaryWallet.balance);
+  if (
+    !isBscTestnetNetwork(primaryWallet.network) ||
+    !isAddressLike(primaryWallet.address)
+  ) {
+    return fallbackBalance;
+  }
+
+  const liveBalances = await getTokenBalancesOnBscTestnet([
+    primaryWallet.address,
+  ]).catch((error) => {
+    console.warn("[dashboard] primary live BSC token balance fetch failed", {
+      userId,
+      error: error instanceof Error ? error.message : "unknown",
+    });
+    return null;
+  });
+
+  const normalizedAddress = toChecksumAddress(primaryWallet.address).toLowerCase();
+  const liveBalance = liveBalances?.get(normalizedAddress);
+
+  return typeof liveBalance === "number" ? liveBalance : fallbackBalance;
+}
+
+async function hasVerifiedDestinationBankAccount(
+  userId: string,
+  destination: string,
+) {
+  const [account] = await db
+    .select({ id: bankAccountsTable.id })
+    .from(bankAccountsTable)
+    .where(
+      and(
+        eq(bankAccountsTable.userId, userId),
+        eq(bankAccountsTable.ibanMasked, destination),
+        eq(bankAccountsTable.status, "verified"),
+      ),
+    )
+    .limit(1);
+
+  return Boolean(account?.id);
+}
+
+async function hasVerifiedConnectedWalletAddress(
+  userId: string,
+  destinationAddress: string,
+) {
+  const normalizedDestination = normalizeWalletAddress(destinationAddress);
+  if (!normalizedDestination) {
+    return false;
+  }
+
+  const [address] = await db
+    .select({ id: managedWalletAddressesTable.id })
+    .from(managedWalletAddressesTable)
+    .where(
+      and(
+        eq(managedWalletAddressesTable.userId, userId),
+        eq(managedWalletAddressesTable.address, normalizedDestination),
+        eq(managedWalletAddressesTable.connectionStatus, "connected"),
+        eq(managedWalletAddressesTable.verificationStatus, "verified"),
+      ),
+    )
+    .limit(1);
+
+  return Boolean(address?.id);
+}
 
 async function getUserNameMap(userIds: string[]) {
   if (userIds.length === 0) {
@@ -257,6 +454,8 @@ export type DashboardState = {
     accountHolder: string;
     bankName: string;
     ibanMasked: string;
+    accountNumberMasked: string;
+    bankAddress: string;
     swiftCode: string;
     country: string;
     currency: string;
@@ -682,6 +881,8 @@ export async function getDashboardStateForUser(
     accountHolder: row.accountHolder,
     bankName: row.bankName,
     ibanMasked: row.ibanMasked,
+    accountNumberMasked: row.accountNumberMasked ?? "-",
+    bankAddress: row.bankAddress ?? "-",
     swiftCode: row.swiftCode ?? "-",
     country: row.country,
     currency: row.currency,
@@ -748,21 +949,65 @@ export async function getDashboardStateForUser(
     walletTimelineByWalletId.set(row.walletAddressId, current);
   }
 
-  const walletAddresses = walletAddressRows.map((row) => ({
-    id: row.id,
-    label: row.label,
-    address: row.address,
-    network: row.network,
-    type: row.type,
-    balance: toNumber(row.balance),
-    allocation: toNumber(row.allocationPercent),
-    verificationStatus: row.verificationStatus,
-    connectionStatus: row.connectionStatus,
-    addedAt: toIso(row.addedAt),
-    lastActivityAt: row.lastActivityAt ? toIso(row.lastActivityAt) : undefined,
-    tags: tagsByWalletId.get(row.id) ?? [],
-    timeline: walletTimelineByWalletId.get(row.id) ?? [],
-  }));
+  const bscWalletAddresses = Array.from(
+    new Set(
+      walletAddressRows
+        .filter(
+          (row) =>
+            isBscTestnetNetwork(row.network) &&
+            isWalletBalanceVisible({
+              verificationStatus: row.verificationStatus,
+              connectionStatus: row.connectionStatus,
+            }),
+        )
+        .map((row) => row.address),
+    ),
+  );
+  const liveBalancesByAddress = await getTokenBalancesOnBscTestnet(
+    bscWalletAddresses,
+  ).catch((error) => {
+    console.warn("[dashboard] live BSC token balance fetch failed", {
+      userId,
+      error: error instanceof Error ? error.message : "unknown",
+    });
+    return null;
+  });
+
+  const walletAddresses = walletAddressRows.map((row) => {
+    const normalizedAddress = isAddressLike(row.address)
+      ? toChecksumAddress(row.address).toLowerCase()
+      : "";
+    const liveBalance = liveBalancesByAddress?.get(normalizedAddress);
+    const effectiveConnectionStatus = isWalletReconnectRestrictedStatus(
+      row.verificationStatus,
+    )
+      ? "inactive"
+      : row.connectionStatus;
+    const balanceVisible = isWalletBalanceVisible({
+      verificationStatus: row.verificationStatus,
+      connectionStatus: effectiveConnectionStatus,
+    });
+
+    return {
+      id: row.id,
+      label: row.label,
+      address: row.address,
+      network: row.network,
+      type: row.type,
+      balance: balanceVisible
+        ? typeof liveBalance === "number"
+          ? liveBalance
+          : toNumber(row.balance)
+        : 0,
+      allocation: toNumber(row.allocationPercent),
+      verificationStatus: row.verificationStatus,
+      connectionStatus: effectiveConnectionStatus,
+      addedAt: toIso(row.addedAt),
+      lastActivityAt: row.lastActivityAt ? toIso(row.lastActivityAt) : undefined,
+      tags: tagsByWalletId.get(row.id) ?? [],
+      timeline: walletTimelineByWalletId.get(row.id) ?? [],
+    };
+  });
 
   const walletActivity = walletActivityRows.map((row) => ({
     id: row.id,
@@ -821,12 +1066,30 @@ export async function getDashboardStateForUser(
     ["not_started", "needs_update", "rejected"].includes(entry.status),
   ).length;
 
-  const holdings = walletAddresses.reduce((sum, row) => sum + row.balance, 0);
+  const holdings = walletAddresses
+    .filter(
+      (row) =>
+        row.connectionStatus === "connected" &&
+        row.verificationStatus === "verified",
+    )
+    .reduce((sum, row) => sum + (row.balance ?? 0), 0);
   const pendingRequests =
     mintRequests.filter((row) => isMintOpenStatus(row.status)).length +
     redeemRequests.filter((row) => isRedeemOpenStatus(row.status)).length;
+  const activeConnectionIds = new Set(
+    walletAddressRows
+      .filter(
+        (row) =>
+          row.connectionId &&
+          row.connectionStatus === "connected" &&
+          !isWalletReconnectRestrictedStatus(row.verificationStatus),
+      )
+      .map((row) => row.connectionId),
+  );
   const activeWalletConnection =
-    walletConnection.find((row) => row.status === "connected") ?? null;
+    walletConnection.find(
+      (row) => row.status === "connected" && activeConnectionIds.has(row.id),
+    ) ?? null;
 
   const overviewActivities: DashboardState["overviewActivities"] = [
     ...mintRequests.slice(0, 8).map((row) => ({
@@ -861,7 +1124,7 @@ export async function getDashboardStateForUser(
       holdings,
       pendingRequests,
       kybStatus: latestKybCase[0]?.status ?? "not_started",
-      reserveCoverage: latestReserveSnapshot?.coverageRatio ?? 0,
+      reserveCoverage: (latestReserveSnapshot?.coverageRatio ?? 0) * 100,
       latestActivityAt: latestActivity ?? new Date(0).toISOString(),
       blockers: blockedChecklistCount,
     },
@@ -913,6 +1176,18 @@ export async function createMintRequestForUser(
     note?: string;
   },
 ) {
+  await assertKybApprovedForUser(userId);
+  const destination = input.destination.trim();
+  const hasVerifiedDestination = await hasVerifiedConnectedWalletAddress(
+    userId,
+    destination,
+  );
+  if (!hasVerifiedDestination) {
+    throw new Error(
+      DASHBOARD_REQUEST_CREATION_DOMAIN_ERRORS.mintDestinationWalletNotVerified,
+    );
+  }
+
   const now = new Date();
   const requestRef = createRequestRef("MNT");
   const [created] = await db
@@ -923,7 +1198,7 @@ export async function createMintRequestForUser(
       submittedByUserId: userId,
       amount: String(input.amount),
       paymentReference: input.paymentRef,
-      destinationAddressRaw: input.destination,
+      destinationAddressRaw: destination,
       status: "submitted",
       submittedAt: now,
     })
@@ -1078,6 +1353,26 @@ export async function createRedeemRequestForUser(
     note?: string;
   },
 ) {
+  await assertKybApprovedForUser(userId);
+
+  const redeemableBalance = await getRedeemableBalanceForUser(userId);
+  if (redeemableBalance <= 0) {
+    throw new Error(
+      DASHBOARD_REQUEST_CREATION_DOMAIN_ERRORS.redeemBalanceNotPositive,
+    );
+  }
+
+  const destination = input.destination.trim();
+  const hasVerifiedDestination = await hasVerifiedDestinationBankAccount(
+    userId,
+    destination,
+  );
+  if (!hasVerifiedDestination) {
+    throw new Error(
+      DASHBOARD_REQUEST_CREATION_DOMAIN_ERRORS.redeemDestinationBankAccountNotVerified,
+    );
+  }
+
   const now = new Date();
   const requestRef = createRequestRef("RDM");
   const [created] = await db
@@ -1087,7 +1382,7 @@ export async function createRedeemRequestForUser(
       userId,
       submittedByUserId: userId,
       amount: String(input.amount),
-      destinationAccountMasked: input.destination,
+      destinationAccountMasked: destination,
       payoutRail: input.payoutRail,
       status: "submitted",
       submittedAt: now,
@@ -1250,6 +1545,8 @@ export async function createBankAccountForUser(
     accountHolder: string;
     bankName: string;
     ibanMasked: string;
+    accountNumberMasked: string;
+    bankAddress: string;
     swiftCode?: string;
     country: string;
     currency: string;
@@ -1272,6 +1569,8 @@ export async function createBankAccountForUser(
       accountHolder: input.accountHolder,
       bankName: input.bankName,
       ibanMasked: input.ibanMasked,
+      accountNumberMasked: input.accountNumberMasked,
+      bankAddress: input.bankAddress,
       swiftCode: input.swiftCode ?? null,
       country: input.country,
       currency: input.currency,
@@ -1326,6 +1625,21 @@ export async function connectWalletForUser(
       )
       .limit(1);
 
+    const [restrictedAddressForUser] = await tx
+      .select({ id: managedWalletAddressesTable.id })
+      .from(managedWalletAddressesTable)
+      .where(
+        and(
+          eq(managedWalletAddressesTable.userId, userId),
+          eq(managedWalletAddressesTable.address, accountAddress),
+          inArray(managedWalletAddressesTable.verificationStatus, [
+            "rejected",
+            "inactive",
+          ]),
+        ),
+      )
+      .limit(1);
+
     if (existingConnection && existingConnection.userId !== userId) {
       throw new Error(
         DASHBOARD_WALLET_DOMAIN_ERRORS.connectionOwnershipConflict,
@@ -1333,6 +1647,9 @@ export async function connectWalletForUser(
     }
     if (existingAddress && existingAddress.userId !== userId) {
       throw new Error(DASHBOARD_WALLET_DOMAIN_ERRORS.addressOwnershipConflict);
+    }
+    if (restrictedAddressForUser) {
+      throw new Error(DASHBOARD_WALLET_DOMAIN_ERRORS.addressReconnectRestricted);
     }
 
     let connection: NonNullable<typeof existingConnection>;
@@ -1435,6 +1752,21 @@ export async function connectWalletForUser(
       occurredAt: now,
     });
 
+    await tx.insert(userNotificationsTable).values({
+      userId,
+      category: "wallet",
+      title: "Wallet connected",
+      message: `Wallet ${address.label} (${address.network}) is connected.`,
+      channel: "in_app",
+      eventStatus: "connected",
+      entityType: "wallet",
+      entityRef: address.id,
+      isRead: false,
+      readAt: null,
+      createdAt: now,
+      updatedAt: now,
+    });
+
     return {
       connection,
       address,
@@ -1528,6 +1860,16 @@ export async function disconnectWalletForUser(
     occurredAt: now,
   });
 
+  await insertUserNotification({
+    userId,
+    category: "wallet",
+    title: "Wallet disconnected",
+    message: `Wallet ${existingAddress.label} (${existingAddress.network}) is disconnected.`,
+    status: "inactive",
+    entityType: "wallet",
+    entityRef: existingAddress.id,
+  });
+
   return requireInserted(updatedAddress, "Failed to disconnect wallet address");
 }
 
@@ -1609,6 +1951,21 @@ export async function setPrimaryWalletAddressForUser(
       network: targetAddress.network,
       status: "active",
       occurredAt: now,
+    });
+
+    await tx.insert(userNotificationsTable).values({
+      userId,
+      category: "wallet",
+      title: "Primary wallet updated",
+      message: `Wallet ${targetAddress.label} is now your primary wallet.`,
+      channel: "in_app",
+      eventStatus: "active",
+      entityType: "wallet",
+      entityRef: targetAddress.id,
+      isRead: false,
+      readAt: null,
+      createdAt: now,
+      updatedAt: now,
     });
 
     return requireInserted(
@@ -1850,6 +2207,7 @@ async function getPreferredConnectedWalletAddressByUserId(userIds: string[]) {
       and(
         inArray(managedWalletAddressesTable.userId, userIds),
         eq(managedWalletAddressesTable.connectionStatus, "connected"),
+        eq(managedWalletAddressesTable.verificationStatus, "verified"),
       ),
     )
     .orderBy(
@@ -1995,6 +2353,26 @@ export async function updateMintRequestStatusForAdmin(
     occurredAt: now,
   });
 
+  await insertUserNotification({
+    userId: existing.userId,
+    category: "mint",
+    title:
+      nextStatus === "completed"
+        ? "Mint approved"
+        : nextStatus === "rejected"
+          ? "Mint rejected"
+          : "Mint status updated",
+    message:
+      nextStatus === "completed"
+        ? `Mint request ${existing.requestRef} was approved.`
+        : nextStatus === "rejected"
+          ? `Mint request ${existing.requestRef} was rejected.`
+          : `Mint request ${existing.requestRef} moved to review.`,
+    status: nextStatus,
+    entityType: "mint_request",
+    entityRef: existing.requestRef,
+  });
+
   return requireInserted(updated, "Failed to update mint request status");
 }
 
@@ -2117,6 +2495,30 @@ export async function updateRedeemRequestStatusForAdmin(
     actorLabel: "Redemption Ops",
     note: eventNote,
     occurredAt: now,
+  });
+
+  await insertUserNotification({
+    userId: existing.userId,
+    category: "redeem",
+    title:
+      nextStatus === "completed"
+        ? "Redemption approved"
+        : nextStatus === "rejected"
+          ? "Redemption rejected"
+          : nextStatus === "processing"
+            ? "Redemption processing"
+            : "Redemption status updated",
+    message:
+      nextStatus === "completed"
+        ? `Redemption request ${existing.requestRef} was approved.`
+        : nextStatus === "rejected"
+          ? `Redemption request ${existing.requestRef} was rejected.`
+          : nextStatus === "processing"
+            ? `Redemption request ${existing.requestRef} is processing.`
+            : `Redemption request ${existing.requestRef} was queued.`,
+    status: nextStatus,
+    entityType: "redeem_request",
+    entityRef: existing.requestRef,
   });
 
   return requireInserted(updated, "Failed to update redeem request status");

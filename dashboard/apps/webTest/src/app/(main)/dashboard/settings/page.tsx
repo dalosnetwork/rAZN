@@ -75,7 +75,33 @@ const initialProfile: SettingsProfile = {
   baseCurrency: "USD",
   reportingContact: "",
 };
-const initialNotifications: SettingsNotificationPreference[] = [];
+const USER_NOTIFICATION_TEMPLATES: Array<
+  Omit<SettingsNotificationPreference, "enabled">
+> = [
+  {
+    id: "user-redemption-approved",
+    label: "Redemption approved",
+    description: "Email when your redemption request is approved.",
+    channel: "email",
+  },
+  {
+    id: "user-mint-approved",
+    label: "Mint approved",
+    description: "Email when your mint request is approved.",
+    channel: "email",
+  },
+  {
+    id: "user-kyb-approved",
+    label: "KYB approved",
+    description: "Email when your KYB verification is approved.",
+    channel: "email",
+  },
+];
+const initialNotifications: SettingsNotificationPreference[] =
+  USER_NOTIFICATION_TEMPLATES.map((item) => ({
+    ...item,
+    enabled: true,
+  }));
 const initialSessions: SettingsSecuritySession[] = [];
 const initialPreferences: SettingsDashboardPreferences = {
   defaultLandingPage: "/dashboard/overview",
@@ -142,14 +168,25 @@ export default function Page() {
     sessionTimeout: "30",
   });
 
+  function buildUserNotificationsFromState(
+    entries: SettingsNotificationPreference[],
+  ) {
+    const byLabel = new Map(entries.map((entry) => [entry.label, entry]));
+    return USER_NOTIFICATION_TEMPLATES.map((template) => ({
+      ...template,
+      enabled: byLabel.get(template.label)?.enabled ?? true,
+    }));
+  }
+
   React.useEffect(() => {
     if (!dashboardStateQuery.data) {
       return;
     }
 
     const nextProfile = dashboardStateQuery.data.settingsProfile;
-    const nextNotifications =
-      dashboardStateQuery.data.settingsNotificationPreferences;
+    const nextNotifications = buildUserNotificationsFromState(
+      dashboardStateQuery.data.settingsNotificationPreferences,
+    );
     const nextSessions = dashboardStateQuery.data.settingsSecuritySessions;
     const nextPreferences =
       dashboardStateQuery.data.settingsDashboardPreferences;
@@ -625,8 +662,8 @@ export default function Page() {
 
         <TabsContent value="notifications" className="space-y-4">
           <MvpSectionCard
-            title={tt("Notification preferences")}
-            description={tt("Select which operational events should generate alerts and where they should be delivered.")}
+            title={tt("Security notification preferences")}
+            description={tt("Choose which email updates you receive for approvals and verification milestones.")}
             contentClassName="space-y-3"
           >
             {notifications.map((item) => (
@@ -655,26 +692,8 @@ export default function Page() {
                       onCheckedChange={(checked) =>
                         toggleNotification(item.id, "enabled", checked)
                       }
-                    />
-                  </div>
-                  {typeof item.criticalOnly === "boolean" ? (
-                    <div className="flex items-center gap-2">
-                      <Label
-                        htmlFor={`${item.id}-critical`}
-                        className="text-xs"
-                      >
-                        {tt("Critical only")}
-                      </Label>
-                      <Switch
-                        id={`${item.id}-critical`}
-                        checked={item.criticalOnly}
-                        disabled={!canEditSettings}
-                        onCheckedChange={(checked) =>
-                          toggleNotification(item.id, "criticalOnly", checked)
-                        }
                       />
-                    </div>
-                  ) : null}
+                  </div>
                 </div>
               </div>
             ))}

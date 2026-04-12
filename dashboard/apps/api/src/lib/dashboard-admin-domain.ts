@@ -11,12 +11,13 @@ import {
   reserveSnapshotAllocationsTable,
   reserveSnapshotEventsTable,
   reserveSnapshotsTable,
+  userNotificationsTable,
   userTable,
   walletActivityEventsTable,
   walletConnectionsTable,
 } from "@repo/db";
 import { hasAdminRole } from "@repo/auth/rbac";
-import { and, asc, desc, eq, inArray, isNotNull, isNull } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull, not } from "drizzle-orm";
 
 import {
   getMintOpsQueueForAdmin,
@@ -27,7 +28,7 @@ import {
   KYB_FILE_STORAGE_ERRORS,
   readKybPdfFile,
 } from "./kyb-file-storage";
-import { listUsersWithRoles } from "./users";
+import { disableUserAccess, listUsersWithRoles } from "./users";
 
 type NumberLike = string | number | null | undefined;
 
@@ -198,7 +199,7 @@ export async function getAdminOverviewState(): Promise<AdminOverviewState> {
   return {
     kpis: {
       totalCirculatingSupply: latestSupply,
-      reserveCoverage: toNumber(latestReserveSnapshot?.coverageRatio),
+      reserveCoverage: toNumber(latestReserveSnapshot?.coverageRatio) * 100,
       outstandingMintValue,
       monthlySupplyGrowthRate,
       outstandingRedemptionValue,
@@ -238,6 +239,17 @@ export type AdminKybCase = {
     isPrimary: boolean;
     country: string;
     currency: string;
+  }[];
+  walletAccounts: {
+    walletAddressId: string;
+    label: string;
+    walletAddress: string;
+    network: string;
+    walletProvider: string;
+    verificationStatus: string;
+    connectionStatus: string;
+    addedAt: string;
+    isPrimary: boolean;
   }[];
   walletDetails: {
     network: string;
@@ -364,10 +376,31 @@ export async function getAdminKybCases(): Promise<AdminKybCase[]> {
   }
 
   const connectionByUserId = new Map<string, (typeof walletConnectionRows)[number]>();
+  const connectionById = new Map<string, (typeof walletConnectionRows)[number]>();
   for (const row of walletConnectionRows) {
     if (!connectionByUserId.has(row.userId)) {
       connectionByUserId.set(row.userId, row);
     }
+    connectionById.set(row.id, row);
+  }
+
+  const walletAccountsByUserId = new Map<string, AdminKybCase["walletAccounts"]>();
+  for (const row of walletAddressRows) {
+    const current = walletAccountsByUserId.get(row.userId) ?? [];
+    const connection = row.connectionId ? connectionById.get(row.connectionId) : undefined;
+    const fallbackConnection = connectionByUserId.get(row.userId);
+    current.push({
+      walletAddressId: row.id,
+      label: row.label,
+      walletAddress: row.address,
+      network: row.network,
+      walletProvider: connection?.provider ?? fallbackConnection?.provider ?? "-",
+      verificationStatus: row.verificationStatus,
+      connectionStatus: row.connectionStatus,
+      addedAt: toIso(row.addedAt),
+      isPrimary: row.type === "primary",
+    });
+    walletAccountsByUserId.set(row.userId, current);
   }
 
   const documentsByCaseId = new Map<string, AdminKybCase["documents"]>();
@@ -406,6 +439,9 @@ export async function getAdminKybCases(): Promise<AdminKybCase[]> {
     const bank = bankByUserId.get(user.id);
     const bankAccounts = bankAccountsByUserId.get(user.id) ?? [];
     const wallet = walletByUserId.get(user.id);
+    const walletAccounts = walletAccountsByUserId.get(user.id) ?? [];
+    const primaryWalletAccount =
+      walletAccounts.find((entry) => entry.isPrimary) ?? walletAccounts[0];
     const connection = connectionByUserId.get(user.id);
 
     return {
@@ -428,10 +464,17 @@ export async function getAdminKybCases(): Promise<AdminKybCase[]> {
         addedAt: bank?.createdAt ? toIso(bank.createdAt) : undefined,
       },
       bankAccounts,
+      walletAccounts,
       walletDetails: {
-        network: wallet?.network ?? connection?.primaryNetwork ?? "-",
-        walletAddress: wallet?.address ?? "-",
-        walletProvider: connection?.provider ?? "-",
+        network:
+          primaryWalletAccount?.network ??
+          wallet?.network ??
+          connection?.primaryNetwork ??
+          "-",
+        walletAddress:
+          primaryWalletAccount?.walletAddress ?? wallet?.address ?? "-",
+        walletProvider:
+          primaryWalletAccount?.walletProvider ?? connection?.provider ?? "-",
       },
       documents: caseRow ? (documentsByCaseId.get(caseRow.id) ?? []) : [],
       notes: caseRow?.notes ?? "",
@@ -452,6 +495,56 @@ export const DASHBOARD_ADMIN_KYB_DOCUMENT_DOMAIN_ERRORS = {
 export const DASHBOARD_ADMIN_BANK_ACCOUNT_DOMAIN_ERRORS = {
   bankAccountNotFound: "ADMIN_BANK_ACCOUNT_NOT_FOUND",
 } as const;
+
+export const DASHBOARD_ADMIN_WALLET_DOMAIN_ERRORS = {
+  walletAddressNotFound: "ADMIN_WALLET_ADDRESS_NOT_FOUND",
+} as const;
+
+export const DASHBOARD_ADMIN_PROFILE_DOMAIN_ERRORS = {
+  customerNotFound: "ADMIN_CUSTOMER_NOT_FOUND",
+  cannotDisableSelf: "ADMIN_CANNOT_DISABLE_SELF",
+} as const;
+
+export async function disableAdminInstitutionProfile(
+  actorUserId: string,
+  caseRef: string,
+) {
+  const [targetCase] = await db
+    .select({
+      userId: kybCasesTable.userId,
+    })
+    .from(kybCasesTable)
+    .where(eq(kybCasesTable.caseRef, caseRef))
+    .limit(1);
+
+  const targetUserId = targetCase?.userId ?? caseRef;
+  if (!targetUserId || targetUserId === actorUserId) {
+    throw new Error(DASHBOARD_ADMIN_PROFILE_DOMAIN_ERRORS.cannotDisableSelf);
+  }
+
+  const [targetUser] = await db
+    .select({
+      id: userTable.id,
+    })
+    .from(userTable)
+    .where(and(eq(userTable.id, targetUserId), isNull(userTable.deletedAt)))
+    .limit(1);
+
+  if (!targetUser) {
+    throw new Error(DASHBOARD_ADMIN_PROFILE_DOMAIN_ERRORS.customerNotFound);
+  }
+
+  const result = await disableUserAccess(targetUser.id);
+  if (!result.disabled) {
+    throw new Error(DASHBOARD_ADMIN_PROFILE_DOMAIN_ERRORS.customerNotFound);
+  }
+
+  return {
+    userId: targetUser.id,
+    sessionsRevoked: result.sessionsRevoked,
+    credentialsCleared: result.credentialsCleared,
+  };
+}
 
 function toKybStatusLabel(
   status:
@@ -662,6 +755,35 @@ export async function updateAdminKybCaseStatus(
       createdAt: now,
     });
 
+    await tx.insert(userNotificationsTable).values({
+      userId: existing.userId,
+      category: "kyb",
+      title:
+        input.status === "approved"
+          ? "KYB approved"
+          : input.status === "rejected"
+            ? "KYB rejected"
+            : input.status === "needs_update"
+              ? "Additional KYB documents requested"
+              : "KYB status updated",
+      message:
+        input.status === "approved"
+          ? `Your KYB case ${existing.caseRef} is approved.`
+          : input.status === "rejected"
+            ? `Your KYB case ${existing.caseRef} is rejected.`
+            : input.status === "needs_update"
+              ? `Your KYB case ${existing.caseRef} needs updated documents.`
+              : `Your KYB case ${existing.caseRef} status is ${input.status.replaceAll("_", " ")}.`,
+      channel: "in_app",
+      eventStatus: input.status,
+      entityType: "kyb_case",
+      entityRef: existing.caseRef,
+      isRead: false,
+      readAt: null,
+      createdAt: now,
+      updatedAt: now,
+    });
+
     return updated;
   });
 }
@@ -745,6 +867,8 @@ export async function updateAdminKybDocumentStatus(
     const [targetCase] = await tx
       .select({
         id: kybCasesTable.id,
+        caseRef: kybCasesTable.caseRef,
+        userId: kybCasesTable.userId,
         notes: kybCasesTable.notes,
       })
       .from(kybCasesTable)
@@ -854,6 +978,35 @@ export async function updateAdminKybDocumentStatus(
       createdAt: now,
     });
 
+    await tx.insert(userNotificationsTable).values({
+      userId: targetCase.userId,
+      category: "kyb",
+      title:
+        input.status === "approved"
+          ? "KYB document approved"
+          : input.status === "rejected"
+            ? "KYB document rejected"
+            : input.status === "needs_update"
+              ? "Additional KYB document requested"
+              : "KYB document under review",
+      message:
+        input.status === "approved"
+          ? `${targetDocument.documentType} was approved.`
+          : input.status === "rejected"
+            ? `${targetDocument.documentType} was rejected.`
+            : input.status === "needs_update"
+              ? `${targetDocument.documentType} requires an updated upload.`
+              : `${targetDocument.documentType} is under review.`,
+      channel: "in_app",
+      eventStatus: derivedCaseStatus,
+      entityType: "kyb_case",
+      entityRef: targetCase.caseRef,
+      isRead: false,
+      readAt: null,
+      createdAt: now,
+      updatedAt: now,
+    });
+
     return {
       documentId: updatedDocument?.id ?? targetDocument.id,
       status: updatedDocument?.status ?? input.status,
@@ -892,6 +1045,157 @@ export async function updateAdminBankAccountStatus(
       })
       .where(eq(bankAccountsTable.id, existing.id))
       .returning();
+
+    await tx.insert(userNotificationsTable).values({
+      userId: existing.userId,
+      category: "bank_account",
+      title:
+        input.status === "verified"
+          ? "Bank account approved"
+          : input.status === "rejected"
+            ? "Bank account rejected"
+            : "Bank account status updated",
+      message:
+        input.status === "verified"
+          ? `${existing.bankName} account was approved.`
+          : input.status === "rejected"
+            ? `${existing.bankName} account was rejected.`
+            : `${existing.bankName} account status is ${input.status.replaceAll("_", " ")}.`,
+      channel: "in_app",
+      eventStatus: input.status,
+      entityType: "bank_account",
+      entityRef: existing.id,
+      isRead: false,
+      readAt: null,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    return updated;
+  });
+}
+
+function toWalletStatusLabel(
+  status: "pending" | "under_review" | "verified" | "rejected" | "inactive",
+) {
+  if (status === "under_review") {
+    return "Wallet moved to review";
+  }
+  if (status === "verified") {
+    return "Wallet approved";
+  }
+  if (status === "rejected") {
+    return "Wallet rejected";
+  }
+  if (status === "inactive") {
+    return "Wallet deactivated";
+  }
+  return "Wallet marked pending";
+}
+
+export async function updateAdminWalletStatus(
+  actorUserId: string,
+  walletAddressId: string,
+  input: {
+    status: "pending" | "under_review" | "verified" | "rejected" | "inactive";
+    note?: string;
+  },
+) {
+  const now = new Date();
+  const shouldDeactivateConnection =
+    input.status === "rejected" || input.status === "inactive";
+  return db.transaction(async (tx) => {
+    const [existing] = await tx
+      .select()
+      .from(managedWalletAddressesTable)
+      .where(eq(managedWalletAddressesTable.id, walletAddressId))
+      .limit(1);
+
+    if (!existing) {
+      throw new Error(DASHBOARD_ADMIN_WALLET_DOMAIN_ERRORS.walletAddressNotFound);
+    }
+
+    const [updated] = await tx
+      .update(managedWalletAddressesTable)
+      .set({
+        verificationStatus: input.status,
+        connectionStatus: shouldDeactivateConnection
+          ? "inactive"
+          : existing.connectionStatus,
+        connectionId: shouldDeactivateConnection ? null : existing.connectionId,
+        lastActivityAt: now,
+        updatedAt: now,
+      })
+      .where(eq(managedWalletAddressesTable.id, existing.id))
+      .returning();
+
+    if (shouldDeactivateConnection && existing.connectionId) {
+      const [otherConnectedAddress] = await tx
+        .select({ id: managedWalletAddressesTable.id })
+        .from(managedWalletAddressesTable)
+        .where(
+          and(
+            eq(managedWalletAddressesTable.userId, existing.userId),
+            eq(managedWalletAddressesTable.connectionId, existing.connectionId),
+            eq(managedWalletAddressesTable.connectionStatus, "connected"),
+            not(eq(managedWalletAddressesTable.id, existing.id)),
+          ),
+        )
+        .limit(1);
+
+      if (!otherConnectedAddress) {
+        await tx
+          .update(walletConnectionsTable)
+          .set({
+            status: "inactive",
+            updatedAt: now,
+          })
+          .where(
+            and(
+              eq(walletConnectionsTable.id, existing.connectionId),
+              eq(walletConnectionsTable.userId, existing.userId),
+            ),
+          );
+      }
+    }
+
+    await tx.insert(walletActivityEventsTable).values({
+      userId: existing.userId,
+      connectionId: existing.connectionId,
+      walletAddressId: existing.id,
+      action: toWalletStatusLabel(input.status),
+      actorUserId,
+      actorLabel: "Compliance",
+      target: existing.label,
+      network: existing.network,
+      status: input.status,
+      occurredAt: now,
+    });
+
+    await tx.insert(userNotificationsTable).values({
+      userId: existing.userId,
+      category: "wallet",
+      title:
+        input.status === "verified"
+          ? "Wallet approved"
+          : input.status === "rejected"
+            ? "Wallet rejected"
+            : "Wallet status updated",
+      message:
+        input.status === "verified"
+          ? `Wallet ${existing.label} was approved.`
+          : input.status === "rejected"
+            ? `Wallet ${existing.label} was rejected.`
+            : `Wallet ${existing.label} status is ${input.status.replaceAll("_", " ")}.`,
+      channel: "in_app",
+      eventStatus: input.status,
+      entityType: "wallet",
+      entityRef: existing.id,
+      isRead: false,
+      readAt: null,
+      createdAt: now,
+      updatedAt: now,
+    });
 
     return updated;
   });
@@ -1171,7 +1475,7 @@ export async function getAdminWalletState(): Promise<AdminWalletState> {
       ownerName: owner?.name ?? "Unknown User",
       ownerEmail: owner?.email ?? "-",
       balance: toNumber(row.balance),
-      status: row.connectionStatus,
+      status: row.verificationStatus,
       network: row.network,
       address: row.address,
       updatedAt: toIso(row.lastActivityAt ?? row.updatedAt),

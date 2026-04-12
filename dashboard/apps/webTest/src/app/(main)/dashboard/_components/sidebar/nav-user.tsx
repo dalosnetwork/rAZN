@@ -2,8 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import {
-  CircleUser,
-  CreditCard,
+  Settings2,
   EllipsisVertical,
   LogOut,
   MessageSquareDot,
@@ -106,16 +105,14 @@ export function NavUser() {
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
               <DropdownMenuItem
-                onSelect={() => router.push("/dashboard/profile")}
+                onSelect={() => router.push("/dashboard/settings")}
               >
-                <CircleUser />
-                {t("user.account")}
+                <Settings2 />
+                {t("sidebar.item.settings")}
               </DropdownMenuItem>
-              <DropdownMenuItem>
-                <CreditCard />
-                {t("user.billing")}
-              </DropdownMenuItem>
-              <DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() => router.push("/dashboard/notifications")}
+              >
                 <MessageSquareDot />
                 {t("user.notifications")}
               </DropdownMenuItem>

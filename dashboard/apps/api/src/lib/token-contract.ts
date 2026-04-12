@@ -1,6 +1,7 @@
 import {
   decodeFunctionData,
   createPublicClient,
+  formatUnits,
   getAddress,
   http,
   isAddress,
@@ -22,6 +23,13 @@ const tokenAbi = [
     name: "decimals",
     inputs: [],
     outputs: [{ type: "uint8" }],
+  },
+  {
+    type: "function",
+    stateMutability: "view",
+    name: "balanceOf",
+    inputs: [{ type: "address" }],
+    outputs: [{ type: "uint256" }],
   },
   {
     type: "function",
@@ -376,4 +384,40 @@ export async function verifyRedeemApprovalTx(input: {
     from: verifiedTx.from,
     functionName: decoded.functionName,
   };
+}
+
+export async function getTokenBalancesOnBscTestnet(
+  addresses: string[],
+): Promise<Map<string, number>> {
+  const runtime = getRuntime();
+  const uniqueAddresses = Array.from(
+    new Set(
+      addresses
+        .filter((value) => isAddressLike(value))
+        .map((value) => toChecksumAddress(value).toLowerCase()),
+    ),
+  );
+
+  if (uniqueAddresses.length === 0) {
+    return new Map<string, number>();
+  }
+
+  const decimals = await getTokenDecimals(runtime);
+  const rows = await Promise.all(
+    uniqueAddresses.map(async (walletAddress) => {
+      const raw = await runtime.publicClient.readContract({
+        address: runtime.tokenAddress,
+        abi: tokenAbi,
+        functionName: "balanceOf",
+        args: [walletAddress as Address],
+      });
+      const formatted = Number(formatUnits(raw, decimals));
+      return {
+        walletAddress,
+        balance: Number.isFinite(formatted) ? formatted : 0,
+      };
+    }),
+  );
+
+  return new Map(rows.map((row) => [row.walletAddress, row.balance]));
 }

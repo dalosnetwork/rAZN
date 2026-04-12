@@ -1,9 +1,13 @@
 "use client";
 
+import * as React from "react";
+
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useRouter } from "next/navigation";
 
-import { ChevronRight, MailIcon, PlusCircleIcon } from "lucide-react";
+import { Bell, ChevronRight, Coins } from "lucide-react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -31,9 +35,11 @@ import {
 } from "@/components/ui/sidebar";
 import { useI18n } from "@/components/providers/language-provider";
 import type { TranslationKey } from "@/lib/i18n/messages";
+import {
+  useDashboardNotificationsQuery,
+  useMarkDashboardNotificationsReadMutation,
+} from "@/lib/queries/dashboard";
 import type { NavGroup, NavMainItem } from "@/navigation/sidebar/sidebar-items";
-
-import { openGlobalSearch } from "./global-search-events";
 
 interface NavMainProps {
   readonly items: readonly NavGroup[];
@@ -198,12 +204,107 @@ const NavItemCollapsed = ({
 };
 
 export function NavMain({ items }: NavMainProps) {
-  const { t } = useI18n();
+  const router = useRouter();
+  const { t, tt } = useI18n();
   const path = usePathname();
   const { state, isMobile } = useSidebar();
-  const quickCreateLabel = t("sidebar.quickCreate");
+  const showMintQuickAction = React.useMemo(
+    () =>
+      items.some((group) =>
+        group.items.some((item) => item.url === "/dashboard/mint"),
+      ),
+    [items],
+  );
+  const showNotificationsQuickAction = React.useMemo(
+    () =>
+      items.some((group) =>
+        group.items.some((item) => item.url === "/dashboard/notifications"),
+      ),
+    [items],
+  );
+
+  const notificationsQuery = useDashboardNotificationsQuery(
+    1,
+    20,
+    showNotificationsQuickAction,
+    {
+      refetchInterval: showNotificationsQuickAction ? 5_000 : false,
+    },
+  );
+  const markNotificationsReadMutation = useMarkDashboardNotificationsReadMutation();
+  const mintLabel = t("sidebar.item.mint");
   const inboxLabel = t("sidebar.inbox");
   const soonLabel = t("sidebar.soon");
+  const notificationRows = notificationsQuery.data?.rows ?? [];
+  const unreadCount = notificationsQuery.data?.pagination.unreadCount ?? 0;
+  const hasInitializedToastRef = React.useRef(false);
+  const previousRowIdsRef = React.useRef<Set<string>>(new Set());
+  const hasMarkedNotificationsRef = React.useRef(false);
+
+  React.useEffect(() => {
+    if (!showNotificationsQuickAction) {
+      hasMarkedNotificationsRef.current = false;
+      return;
+    }
+
+    if (!path.startsWith("/dashboard/notifications")) {
+      hasMarkedNotificationsRef.current = false;
+      return;
+    }
+
+    if (!notificationsQuery.data) {
+      return;
+    }
+
+    if (hasMarkedNotificationsRef.current) {
+      return;
+    }
+
+    hasMarkedNotificationsRef.current = true;
+    if (unreadCount > 0) {
+      markNotificationsReadMutation.mutate({ markAll: true });
+    }
+  }, [
+    markNotificationsReadMutation,
+    notificationsQuery.data,
+    path,
+    showNotificationsQuickAction,
+    unreadCount,
+  ]);
+
+  React.useEffect(() => {
+    if (!showNotificationsQuickAction) {
+      return;
+    }
+
+    if (!notificationsQuery.data) {
+      return;
+    }
+
+    const currentIds = new Set(notificationRows.map((row) => row.id));
+    if (!hasInitializedToastRef.current) {
+      previousRowIdsRef.current = currentIds;
+      hasInitializedToastRef.current = true;
+      return;
+    }
+
+    if (path.startsWith("/dashboard/notifications")) {
+      previousRowIdsRef.current = currentIds;
+      return;
+    }
+
+    const newRows = notificationRows.filter(
+      (row) => !previousRowIdsRef.current.has(row.id) && !row.isRead,
+    );
+
+    for (const row of newRows.slice(0, 3)) {
+      toast.info(tt(row.title), {
+        description: tt(row.message),
+      });
+    }
+
+    previousRowIdsRef.current = currentIds;
+  }, [notificationRows, notificationsQuery.data, path, showNotificationsQuickAction, tt]);
 
   const isItemActive = (url: string, subItems?: NavMainItem["subItems"]) => {
     if (subItems?.length) {
@@ -218,33 +319,49 @@ export function NavMain({ items }: NavMainProps) {
 
   return (
     <>
-      <SidebarGroup>
-        <SidebarGroupContent className="flex flex-col gap-2">
-          <SidebarMenu>
-            <SidebarMenuItem className="flex items-center gap-2">
-              <SidebarMenuButton
-                tooltip={quickCreateLabel}
-                className="min-w-8 bg-primary text-primary-foreground duration-200 ease-linear hover:bg-primary/90 hover:text-primary-foreground active:bg-primary/90 active:text-primary-foreground"
-                onClick={() => openGlobalSearch({ scope: "actions" })}
-              >
-                <PlusCircleIcon />
-                <span>{quickCreateLabel}</span>
-              </SidebarMenuButton>
-              <Button
-                size="icon"
-                className="h-9 w-9 shrink-0 group-data-[collapsible=icon]:opacity-0"
-                variant="outline"
-                onClick={() =>
-                  openGlobalSearch({ scope: "actions", query: "queue" })
-                }
-              >
-                <MailIcon />
-                <span className="sr-only">{inboxLabel}</span>
-              </Button>
-            </SidebarMenuItem>
-          </SidebarMenu>
-        </SidebarGroupContent>
-      </SidebarGroup>
+      {(showMintQuickAction || showNotificationsQuickAction) && (
+        <SidebarGroup>
+          <SidebarGroupContent className="flex flex-col gap-2">
+            <SidebarMenu>
+              <SidebarMenuItem className="flex items-center gap-2">
+                {showMintQuickAction && (
+                  <SidebarMenuButton
+                    asChild
+                    tooltip={mintLabel}
+                    className="relative min-w-8 bg-primary text-primary-foreground duration-200 ease-linear hover:bg-primary/90 hover:text-primary-foreground active:bg-primary/90 active:text-primary-foreground"
+                  >
+                    <Link prefetch={false} href="/dashboard/mint">
+                      <Coins />
+                      <span>{mintLabel}</span>
+                      {showNotificationsQuickAction && unreadCount > 0 && (
+                        <span className="absolute top-1 right-1 hidden min-h-4 min-w-4 items-center justify-center rounded-full bg-primary-foreground px-1 text-[10px] text-primary leading-none group-data-[collapsible=icon]:inline-flex">
+                          {unreadCount > 99 ? "99+" : unreadCount}
+                        </span>
+                      )}
+                    </Link>
+                  </SidebarMenuButton>
+                )}
+                {showNotificationsQuickAction && (
+                  <Button
+                    size="icon"
+                    className="relative h-9 w-9 shrink-0 group-data-[collapsible=icon]:opacity-0"
+                    variant="outline"
+                    onClick={() => router.push("/dashboard/notifications")}
+                  >
+                    <Bell />
+                    {unreadCount > 0 && (
+                      <span className="-right-1 -top-1 absolute inline-flex min-h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] text-primary-foreground leading-none">
+                        {unreadCount > 99 ? "99+" : unreadCount}
+                      </span>
+                    )}
+                    <span className="sr-only">{inboxLabel}</span>
+                  </Button>
+                )}
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+      )}
       {items.map((group) => (
         <SidebarGroup key={group.id}>
           {(group.label || group.labelKey) && (

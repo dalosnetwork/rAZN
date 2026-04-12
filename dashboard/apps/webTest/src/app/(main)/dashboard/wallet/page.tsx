@@ -321,14 +321,21 @@ export default function Page() {
             item.verificationStatus === "verified") ||
           (statusFilter === "inactive" &&
             (item.connectionStatus === "inactive" ||
-              item.verificationStatus === "inactive"));
+              item.verificationStatus === "inactive" ||
+              item.verificationStatus === "rejected"));
 
         return matchesSearch && matchesNetwork && matchesStatus;
       }),
     [addresses, networkFilter, search, statusFilter],
   );
 
-  const totalBalance = addresses.reduce((sum, item) => sum + item.balance, 0);
+  const totalBalance = addresses
+    .filter(
+      (item) =>
+        item.connectionStatus === "connected" &&
+        item.verificationStatus === "verified",
+    )
+    .reduce((sum, item) => sum + item.balance, 0);
   const connectedWalletCount = addresses.filter(
     (item) => item.connectionStatus === "connected",
   ).length;
@@ -460,6 +467,21 @@ export default function Page() {
 
       if (!accountAddress) {
         toast.error(tt("Wallet address could not be resolved."));
+        return;
+      }
+
+      const restrictedWallet = addresses.find(
+        (row) =>
+          row.address.toLowerCase() === accountAddress.toLowerCase() &&
+          (row.verificationStatus === "rejected" ||
+            row.verificationStatus === "inactive"),
+      );
+      if (restrictedWallet) {
+        toast.error(
+          tt(
+            "This wallet was rejected or deactivated and cannot be connected.",
+          ),
+        );
         return;
       }
 

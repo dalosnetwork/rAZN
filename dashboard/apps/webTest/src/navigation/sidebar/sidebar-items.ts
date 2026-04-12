@@ -1,5 +1,6 @@
 import {
   Ban,
+  Bell,
   BadgeCheck,
   ChartSpline,
   CircleDollarSign,
@@ -9,7 +10,6 @@ import {
   LayoutDashboard,
   Settings2,
   ShieldAlert,
-  ShieldCheck,
   UserRoundCheck,
   Wallet,
   WalletMinimal,
@@ -100,6 +100,12 @@ export const sidebarItems: NavGroup[] = [
         url: "/dashboard/settings",
         icon: Settings2,
       },
+      {
+        title: "Notifications",
+        titleKey: "user.notifications",
+        url: "/dashboard/notifications",
+        icon: Bell,
+      },
     ],
   },
   {
@@ -154,19 +160,6 @@ export const sidebarItems: NavGroup[] = [
         titleKey: "sidebar.item.contractControls",
         url: "/dashboard/admin/settings",
         icon: FileLock2,
-      },
-    ],
-  },
-  {
-    id: 3,
-    label: "System",
-    labelKey: "sidebar.group.system",
-    items: [
-      {
-        title: "Unauthorized",
-        titleKey: "sidebar.item.unauthorized",
-        url: "/unauthorized",
-        icon: ShieldCheck,
       },
     ],
   },

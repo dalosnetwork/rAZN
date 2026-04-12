@@ -84,12 +84,12 @@ export function MvpKpiCard({
   }
 
   return (
-    <div className={cn("group h-full", className)}>
-      <div className="relative h-full transition-transform duration-300 ease-out motion-reduce:transform-none motion-reduce:transition-none group-hover:scale-[1.015]">
+    <div className={cn("group", className)}>
+      <div className="relative overflow-hidden transition-transform duration-300 ease-out motion-reduce:transform-none motion-reduce:transition-none group-hover:scale-[1.04]">
         <Card
           className={cn(
             baseCardClassName,
-            "h-full transition-opacity duration-300 ease-out motion-reduce:opacity-100 motion-reduce:transition-none group-hover:opacity-0",
+            "transition-opacity duration-300 ease-out motion-reduce:opacity-100 motion-reduce:transition-none group-hover:opacity-0",
           )}
         >
           {frontContent}
@@ -98,7 +98,7 @@ export function MvpKpiCard({
         <Card
           className={cn(
             baseCardClassName,
-            "absolute inset-0 h-full gap-0 overflow-hidden py-0 opacity-0 transition-opacity duration-300 ease-out motion-reduce:opacity-0 motion-reduce:transition-none group-hover:opacity-100",
+            "absolute inset-0 gap-0 overflow-hidden py-0 opacity-0 transition-opacity duration-300 ease-out motion-reduce:opacity-0 motion-reduce:transition-none group-hover:opacity-100",
           )}
         >
           <CardContent className="h-full p-0">

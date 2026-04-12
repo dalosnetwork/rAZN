@@ -31,6 +31,7 @@ type TrendChartCardProps<T extends string, TRow extends { date: string }> = {
   data: TRow[];
   series: SeriesConfig<T>[];
   yAxisFormat?: "plain" | "million" | "fixed1";
+  xAxisTickFormatter?: (value: string) => string;
 };
 
 function formatYAxisTick(
@@ -55,6 +56,7 @@ export function TrendChartCard<
   data,
   series,
   yAxisFormat = "plain",
+  xAxisTickFormatter,
 }: TrendChartCardProps<T, TRow>) {
   const { tt } = useI18n();
 
@@ -83,7 +85,11 @@ export function TrendChartCard<
               tickLine={false}
               axisLine={false}
               tickMargin={8}
-              tickFormatter={(value) => formatDate(value).split(",")[0]}
+              tickFormatter={(value) =>
+                xAxisTickFormatter
+                  ? xAxisTickFormatter(String(value))
+                  : formatDate(String(value)).split(",")[0]
+              }
             />
             <YAxis
               tickLine={false}

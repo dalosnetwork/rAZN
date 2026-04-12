@@ -80,6 +80,10 @@ function canCreateOwnRedeemRequest(access: UserAccess | null | undefined) {
   return hasAccessPermission(access, "dashboard.view");
 }
 
+function hasApprovedKybStatus(status: string | undefined) {
+  return status === "approved";
+}
+
 function toColumns(
   onOpen: (request: RedeemRequest) => void,
   tt: (en: string) => string,
@@ -138,6 +142,10 @@ export default function Page() {
   const canCreateRedeemRequest = canCreateOwnRedeemRequest(
     meQuery.data?.access,
   );
+  const kybStatus = dashboardStateQuery.data?.overviewCards.kybStatus;
+  const hasApprovedKyb = hasApprovedKybStatus(kybStatus);
+  const redeemableBalance = dashboardStateQuery.data?.overviewCards.holdings ?? 0;
+  const hasPositiveBalance = redeemableBalance > 0;
   const [requests, setRequests] = React.useState<RedeemRequest[]>([]);
   const [form, setForm] = React.useState(initialFormState);
   const [errors, setErrors] = React.useState<
@@ -173,11 +181,44 @@ export default function Page() {
   );
 
   const columns = React.useMemo(() => toColumns(setSelectedRequest, tt), [tt]);
+  const approvedBankAccounts = React.useMemo(() => {
+    const bankAccounts = dashboardStateQuery.data?.bankAccounts ?? [];
+    return bankAccounts
+      .filter((account) => account.status === "verified")
+      .sort((a, b) => Number(b.isPrimary) - Number(a.isPrimary));
+  }, [dashboardStateQuery.data?.bankAccounts]);
+  const approvedDestinationLookup = React.useMemo(
+    () =>
+      new Set(
+        approvedBankAccounts.map((account) =>
+          account.ibanMasked.trim().toLowerCase(),
+        ),
+      ),
+    [approvedBankAccounts],
+  );
+  const hasApprovedBankAccounts = approvedBankAccounts.length > 0;
+  const canSubmitRedeemRequest =
+    canCreateRedeemRequest &&
+    hasApprovedKyb &&
+    hasPositiveBalance &&
+    hasApprovedBankAccounts;
   const pendingAmount = requests
     .filter((row) =>
       ["submitted", "queued", "processing", "approved"].includes(row.status),
     )
     .reduce((sum, row) => sum + row.amount, 0);
+
+  React.useEffect(() => {
+    if (!form.destination) {
+      return;
+    }
+    const isCurrentDestinationApproved = approvedDestinationLookup.has(
+      form.destination.trim().toLowerCase(),
+    );
+    if (!isCurrentDestinationApproved) {
+      setForm((previous) => ({ ...previous, destination: "" }));
+    }
+  }, [approvedDestinationLookup, form.destination]);
 
   function setField<K extends keyof RedeemFormState>(
     field: K,
@@ -202,8 +243,23 @@ export default function Page() {
     if (!form.amount || Number.isNaN(amount) || amount <= 0) {
       nextErrors.amount = "Enter a valid amount.";
     }
-    if (!form.destination.trim()) {
+    if (!hasApprovedKyb) {
+      nextErrors.destination =
+        "KYB must be approved before creating redemption requests.";
+    }
+    if (!hasPositiveBalance) {
+      nextErrors.amount =
+        "Redemption requires a positive wallet balance.";
+    }
+    if (!hasApprovedBankAccounts) {
+      nextErrors.destination =
+        "Add and verify a bank account before creating redemption requests.";
+    } else if (!form.destination.trim()) {
       nextErrors.destination = "Payout destination is required.";
+    } else if (
+      !approvedDestinationLookup.has(form.destination.trim().toLowerCase())
+    ) {
+      nextErrors.destination = "Select one of your verified bank accounts.";
     }
 
     setErrors(nextErrors);
@@ -247,9 +303,7 @@ export default function Page() {
       <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
         <MvpKpiCard
           label={tt("Redeemable balance")}
-          value={formatCurrency(
-            dashboardStateQuery.data?.overviewCards.holdings ?? 0,
-          )}
+          value={formatCurrency(redeemableBalance)}
           hint={tt("Available amount for new redemption")}
           status="active"
         />
@@ -276,8 +330,23 @@ export default function Page() {
       <div className="space-y-4">
         <MvpSectionCard
           title={tt("Create redemption request")}
-          description={tt("Provide amount, payout destination, and routing details.")}
+          description={tt("Provide amount and select one of your verified destination accounts.")}
         >
+          {!hasApprovedKyb ? (
+            <p className="pb-3 text-destructive text-sm">
+              {tt("KYB must be approved before submitting redemption requests.")}
+            </p>
+          ) : null}
+          {!hasPositiveBalance ? (
+            <p className="pb-3 text-destructive text-sm">
+              {tt("Redemption is unavailable while your wallet balance is zero.")}
+            </p>
+          ) : null}
+          {!hasApprovedBankAccounts ? (
+            <p className="pb-3 text-destructive text-sm">
+              {tt("Add and verify a bank account in Banking before submitting redemption requests.")}
+            </p>
+          ) : null}
           <form
             onSubmit={handleSubmit}
             className="grid grid-cols-1 gap-4 md:grid-cols-2"
@@ -318,15 +387,29 @@ export default function Page() {
               <Label htmlFor="redeem-destination">
                 {tt("Destination account")}
               </Label>
-              <Input
-                id="redeem-destination"
+              <Select
                 value={form.destination}
-                disabled={!canCreateRedeemRequest}
-                onChange={(event) =>
-                  setField("destination", event.target.value)
-                }
-                placeholder="TR****1234"
-              />
+                disabled={!canCreateRedeemRequest || !hasApprovedBankAccounts}
+                onValueChange={(value) => setField("destination", value)}
+              >
+                <SelectTrigger id="redeem-destination">
+                  <SelectValue
+                    placeholder={
+                      hasApprovedBankAccounts
+                        ? tt("Select verified destination account")
+                        : tt("No verified bank account available")
+                    }
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  {approvedBankAccounts.map((account) => (
+                    <SelectItem key={account.id} value={account.ibanMasked}>
+                      {account.isPrimary ? `${tt("Primary")} · ` : ""}
+                      {account.bankName} - {account.ibanMasked} ({account.currency})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               {errors.destination ? (
                 <p className="text-destructive text-xs">
                   {tt(errors.destination)}
@@ -350,7 +433,7 @@ export default function Page() {
               <Button
                 type="submit"
                 disabled={
-                  !canCreateRedeemRequest || submissionState === "submitting"
+                  !canSubmitRedeemRequest || submissionState === "submitting"
                 }
               >
                 {submissionState === "submitting"

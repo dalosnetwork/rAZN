@@ -8,15 +8,20 @@ import {
   createMintRequest,
   createRedeemRequest,
   disconnectWallet,
+  getDashboardNotifications,
+  disableAdminInstitutionProfile,
   getAdminInstitutionCases,
   getAdminMintOpsQueue,
   getAdminOverviewState,
   getAdminRedemptionOpsQueue,
   getAdminReserveManagementState,
+  getReserveManagementState,
   getAdminWalletState,
   getDashboardState,
   uploadKybDocument,
+  markDashboardNotificationsRead,
   updateAdminBankAccountStatus,
+  updateAdminWalletStatus,
   updateAdminInstitutionDocumentStatus,
   updateAdminInstitutionStatus,
   updateAdminMintStatus,
@@ -24,6 +29,7 @@ import {
   updateDashboardSettings,
   setPrimaryWallet,
   type UpdateAdminBankAccountStatusInput,
+  type UpdateAdminWalletStatusInput,
   type ConnectWalletInput,
   type CreateBankAccountInput,
   type CreateMintRequestInput,
@@ -31,6 +37,8 @@ import {
   type DashboardSettingsPatch,
   type DisconnectWalletInput,
   type UploadKybDocumentInput,
+  type DashboardNotificationsPayload,
+  type DisableAdminInstitutionProfileInput,
   type SetPrimaryWalletInput,
   type UpdateAdminInstitutionDocumentStatusInput,
   type UpdateAdminInstitutionStatusInput,
@@ -40,7 +48,10 @@ import {
 
 export const dashboardQueryKeys = {
   state: ["dashboard", "state"] as const,
+  notifications: (page: number, pageSize: number) =>
+    ["dashboard", "notifications", page, pageSize] as const,
   adminOverview: ["dashboard", "admin", "overview"] as const,
+  reserveManagement: ["dashboard", "reserve-management"] as const,
   adminInstitutions: ["dashboard", "admin", "institutions"] as const,
   adminReserveManagement: ["dashboard", "admin", "reserve-management"] as const,
   adminWallet: ["dashboard", "admin", "wallet"] as const,
@@ -48,11 +59,33 @@ export const dashboardQueryKeys = {
   adminRedemptionOps: ["dashboard", "admin", "redemption-ops"] as const,
 };
 
-export function useDashboardStateQuery(enabled = true) {
+type DashboardStateQueryOptions = {
+  refetchInterval?: number | false;
+};
+
+export function useDashboardStateQuery(
+  enabled = true,
+  options?: DashboardStateQueryOptions,
+) {
   return useQuery({
     queryKey: dashboardQueryKeys.state,
     queryFn: getDashboardState,
     enabled,
+    refetchInterval: options?.refetchInterval,
+  });
+}
+
+export function useDashboardNotificationsQuery(
+  page: number,
+  pageSize: number,
+  enabled = true,
+  options?: DashboardStateQueryOptions,
+) {
+  return useQuery<DashboardNotificationsPayload>({
+    queryKey: dashboardQueryKeys.notifications(page, pageSize),
+    queryFn: () => getDashboardNotifications({ page, pageSize }),
+    enabled,
+    refetchInterval: options?.refetchInterval,
   });
 }
 
@@ -85,6 +118,15 @@ export function useAdminReserveManagementQuery(enabled = true) {
     queryKey: dashboardQueryKeys.adminReserveManagement,
     queryFn: getAdminReserveManagementState,
     enabled,
+  });
+}
+
+export function useReserveManagementQuery(enabled = true) {
+  return useQuery({
+    queryKey: dashboardQueryKeys.reserveManagement,
+    queryFn: getReserveManagementState,
+    enabled,
+    refetchInterval: 60_000,
   });
 }
 
@@ -162,6 +204,25 @@ export function useUpdateDashboardSettingsMutation() {
   });
 }
 
+export function useMarkDashboardNotificationsReadMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: { markAll?: boolean; ids?: string[] }) =>
+      markDashboardNotificationsRead(input),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: ["dashboard", "notifications"],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: dashboardQueryKeys.state,
+        }),
+      ]);
+    },
+  });
+}
+
 export function useCreateBankAccountMutation() {
   const queryClient = useQueryClient();
 
@@ -233,6 +294,28 @@ export function useUpdateAdminInstitutionStatusMutation() {
   });
 }
 
+export function useDisableAdminInstitutionProfileMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: DisableAdminInstitutionProfileInput) =>
+      disableAdminInstitutionProfile(input),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: dashboardQueryKeys.adminInstitutions,
+        }),
+        queryClient.invalidateQueries({
+          queryKey: dashboardQueryKeys.adminWallet,
+        }),
+        queryClient.invalidateQueries({
+          queryKey: dashboardQueryKeys.state,
+        }),
+      ]);
+    },
+  });
+}
+
 export function useUpdateAdminInstitutionDocumentStatusMutation() {
   const queryClient = useQueryClient();
 
@@ -263,6 +346,28 @@ export function useUpdateAdminBankAccountStatusMutation() {
       updateAdminBankAccountStatus(input),
     onSuccess: async () => {
       await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: dashboardQueryKeys.adminInstitutions,
+        }),
+        queryClient.invalidateQueries({
+          queryKey: dashboardQueryKeys.state,
+        }),
+      ]);
+    },
+  });
+}
+
+export function useUpdateAdminWalletStatusMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: UpdateAdminWalletStatusInput) =>
+      updateAdminWalletStatus(input),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: dashboardQueryKeys.adminWallet,
+        }),
         queryClient.invalidateQueries({
           queryKey: dashboardQueryKeys.adminInstitutions,
         }),
