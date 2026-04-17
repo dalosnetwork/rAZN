@@ -1504,7 +1504,6 @@ export const RU_TX_FALLBACK: Record<string, string> = {
   "Default Dashboard": "Стандартная панель",
   "Live storage-backed operational metrics, activity feed, and latest users.": "Операционные метрики на основе хранилища, лента активности и последние пользователи.",
   "Could not load dashboard data": "Не удалось загрузить данные панели",
-  Name: "Имя",
   Roles: "Роли",
   "From live admin overview state": "Из состояния обзора администратора в реальном времени",
   "Latest coverage ratio": "Последний коэффициент покрытия",

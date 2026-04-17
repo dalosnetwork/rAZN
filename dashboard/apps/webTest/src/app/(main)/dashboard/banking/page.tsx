@@ -193,7 +193,7 @@ function buildColumns(
 }
 
 export default function Page() {
-  const { tt } = useI18n();
+  const { tt, tx } = useI18n();
   const meQuery = useMeQuery();
   const dashboardStateQuery = useDashboardStateQuery();
   const createBankAccountMutation = useCreateBankAccountMutation();
@@ -247,7 +247,7 @@ export default function Page() {
         toast.error(`${tx("Could not copy", "Kopyalanamadı:", "Не удалось скопировать:", "Kopyalana bilmədi:")} ${label}.`);
       }
     },
-    [tt],
+    [tx],
   );
 
   const columns = React.useMemo(
