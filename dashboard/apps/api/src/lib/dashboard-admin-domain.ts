@@ -733,12 +733,37 @@ export async function updateAdminKybCaseStatus(
       existing = createdCase;
     }
 
+    let nextStatus = input.status;
+    if (input.status === "approved") {
+      const [uploadedSubmission] = await tx
+        .select({ id: kybDocumentSubmissionsTable.id })
+        .from(kybCaseDocumentsTable)
+        .innerJoin(
+          kybDocumentSubmissionsTable,
+          eq(
+            kybDocumentSubmissionsTable.kybCaseDocumentId,
+            kybCaseDocumentsTable.id,
+          ),
+        )
+        .where(
+          and(
+            eq(kybCaseDocumentsTable.kybCaseId, existing.id),
+            isNotNull(kybDocumentSubmissionsTable.storageUri),
+          ),
+        )
+        .limit(1);
+
+      if (!uploadedSubmission) {
+        nextStatus = "needs_update";
+      }
+    }
+
     const [updated] = await tx
       .update(kybCasesTable)
       .set({
-        status: input.status,
+        status: nextStatus,
         reviewedAt:
-          input.status === "approved" || input.status === "rejected"
+          nextStatus === "approved" || nextStatus === "rejected"
             ? now
             : null,
         reviewerUserId: actorUserId,
@@ -750,8 +775,8 @@ export async function updateAdminKybCaseStatus(
 
     await tx.insert(kybCaseEventsTable).values({
       kybCaseId: existing.id,
-      label: toKybStatusLabel(input.status),
-      status: input.status,
+      label: toKybStatusLabel(nextStatus),
+      status: nextStatus,
       actorUserId,
       actorLabel: "Compliance",
       note: input.note ?? null,
@@ -763,23 +788,23 @@ export async function updateAdminKybCaseStatus(
       userId: existing.userId,
       category: "kyb",
       title:
-        input.status === "approved"
+        nextStatus === "approved"
           ? "KYB approved"
-          : input.status === "rejected"
+          : nextStatus === "rejected"
             ? "KYB rejected"
-            : input.status === "needs_update"
+            : nextStatus === "needs_update"
               ? "Additional KYB documents requested"
               : "KYB status updated",
       message:
-        input.status === "approved"
+        nextStatus === "approved"
           ? `Your KYB case ${existing.caseRef} is approved.`
-          : input.status === "rejected"
+          : nextStatus === "rejected"
             ? `Your KYB case ${existing.caseRef} is rejected.`
-            : input.status === "needs_update"
+            : nextStatus === "needs_update"
               ? `Your KYB case ${existing.caseRef} needs updated documents.`
-              : `Your KYB case ${existing.caseRef} status is ${input.status.replaceAll("_", " ")}.`,
+              : `Your KYB case ${existing.caseRef} status is ${nextStatus.replaceAll("_", " ")}.`,
       channel: "in_app",
-      eventStatus: input.status,
+      eventStatus: nextStatus,
       entityType: "kyb_case",
       entityRef: existing.caseRef,
       isRead: false,
