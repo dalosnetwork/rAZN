@@ -142,6 +142,8 @@ export type AdminInstitutionCase = {
   registrationDate: string;
   submittedAt: string;
   status: MvpStatus;
+  onboardingStatus: "pending" | "approved";
+  onboardedAt?: string;
   reviewer: string;
   riskLevel: "low" | "medium" | "high";
   bankDetails: {
@@ -383,6 +385,10 @@ export type UpdateAdminInstitutionStatusInput = {
 };
 
 export type DisableAdminInstitutionProfileInput = {
+  caseRef: string;
+};
+
+export type OnboardAdminInstitutionInput = {
   caseRef: string;
 };
 
@@ -783,6 +789,29 @@ export async function disableAdminInstitutionProfile(
   if (!response.ok) {
     throw new Error(
       getErrorMessage(payload, "Failed to disable customer profile"),
+    );
+  }
+
+  return payload.row;
+}
+
+export async function onboardAdminInstitution(
+  input: OnboardAdminInstitutionInput,
+) {
+  const response = await fetch(
+    `/api/dashboard/admin/institutions/${encodeURIComponent(input.caseRef)}/onboard`,
+    {
+      method: "POST",
+      credentials: "include",
+    },
+  );
+
+  const payload = await parseJson<ApiErrorPayload & { row?: unknown }>(
+    response,
+  );
+  if (!response.ok) {
+    throw new Error(
+      getErrorMessage(payload, "Failed to onboard customer profile"),
     );
   }
 

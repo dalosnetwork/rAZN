@@ -27,7 +27,6 @@ import {
 
 import type {
   KybReviewCase,
-  MvpStatus,
 } from "@/app/(main)/dashboard/_mvp/types";
 
 import { useI18n } from "@/components/providers/language-provider";
@@ -44,10 +43,10 @@ import { getAdminInstitutionDocumentDownloadUrl } from "@/lib/api/dashboard";
 import { useMeQuery } from "@/lib/queries/auth";
 import {
   useDisableAdminInstitutionProfileMutation,
+  useOnboardAdminInstitutionMutation,
   useUpdateAdminBankAccountStatusMutation,
   useAdminInstitutionsQuery,
   useUpdateAdminInstitutionDocumentStatusMutation,
-  useUpdateAdminInstitutionStatusMutation,
   useUpdateAdminWalletStatusMutation,
 } from "@/lib/queries/dashboard";
 import { hasAccessPermission } from "@/lib/rbac/route-access";
@@ -128,7 +127,7 @@ export default function Page() {
   const { tt, tx } = useI18n();
   const meQuery = useMeQuery();
   const adminInstitutionsQuery = useAdminInstitutionsQuery();
-  const updateInstitutionStatusMutation = useUpdateAdminInstitutionStatusMutation();
+  const onboardInstitutionMutation = useOnboardAdminInstitutionMutation();
   const updateDocumentStatusMutation =
     useUpdateAdminInstitutionDocumentStatusMutation();
   const updateBankAccountStatusMutation = useUpdateAdminBankAccountStatusMutation();
@@ -203,34 +202,16 @@ export default function Page() {
     ),
   ).length;
 
-  async function updateCaseStatus(
-    caseRef: string,
-    status: MvpStatus,
-  ) {
-    if (
-      status !== "in_progress" &&
-      status !== "under_review" &&
-      status !== "approved" &&
-      status !== "rejected" &&
-      status !== "needs_update" &&
-      status !== "blocked"
-    ) {
-      return;
-    }
-
-    const note = draftNote.trim() || undefined;
-
+  async function onboardInstitution(caseRef: string) {
     try {
-      await updateInstitutionStatusMutation.mutateAsync({
-        caseRef,
-        status,
-        note,
-      });
+      await onboardInstitutionMutation.mutateAsync({ caseRef });
       await adminInstitutionsQuery.refetch();
-      toast.success(tt("Case status updated."));
+      toast.success(tt("Customer onboarded."));
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : tt("Could not update case."),
+        error instanceof Error
+          ? error.message
+          : tt("Could not onboard customer."),
       );
     }
   }
@@ -533,30 +514,15 @@ export default function Page() {
           selectedCase ? (
             <div className="grid grid-cols-1 gap-2">
               <Button
-                onClick={() =>
-                  void updateCaseStatus(selectedCase.customerId, "approved")
+                onClick={() => void onboardInstitution(selectedCase.customerId)}
+                disabled={
+                  onboardInstitutionMutation.isPending ||
+                  selectedCase.onboardingStatus === "approved"
                 }
-                disabled={updateInstitutionStatusMutation.isPending}
               >
-                {tt("Approve")}
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() =>
-                  void updateCaseStatus(selectedCase.customerId, "needs_update")
-                }
-                disabled={updateInstitutionStatusMutation.isPending}
-              >
-                {tt("Request update")}
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() =>
-                  void updateCaseStatus(selectedCase.customerId, "rejected")
-                }
-                disabled={updateInstitutionStatusMutation.isPending}
-              >
-                {tt("Reject")}
+                {selectedCase.onboardingStatus === "approved"
+                  ? tt("Already onboarded")
+                  : tt("Onboard")}
               </Button>
               <Button
                 variant="destructive"
@@ -577,6 +543,8 @@ export default function Page() {
               <div className="flex flex-wrap items-center gap-2">
                 <p className="font-medium text-sm">{tt("KYB status")}:</p>
                 <StatusBadge status={selectedCase.status} />
+                <p className="font-medium text-sm">{tt("Onboarding")}:</p>
+                <StatusBadge status={selectedCase.onboardingStatus} />
                 <span className="rounded-md bg-muted px-2 py-1 text-xs">
                   {tt("Risk")} {tt(selectedCase.riskLevel)}
                 </span>

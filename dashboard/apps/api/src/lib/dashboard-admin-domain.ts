@@ -217,6 +217,8 @@ export type AdminKybCase = {
   registrationDate: string;
   submittedAt: string;
   status: string;
+  onboardingStatus: "pending" | "approved";
+  onboardedAt?: string;
   reviewer: string;
   riskLevel: "low" | "medium" | "high";
   bankDetails: {
@@ -311,9 +313,16 @@ export async function getAdminKybCases(): Promise<AdminKybCase[]> {
     ]),
   );
   const caseIds = latestCases.map((row) => row.id);
-  const [userMap, bankRows, walletAddressRows, walletConnectionRows, documents, events] =
+  const [userMap, onboardingRows, bankRows, walletAddressRows, walletConnectionRows, documents, events] =
     await Promise.all([
       getUserProfileMap(userIds),
+      db
+        .select({
+          id: userTable.id,
+          onboardedAt: userTable.onboardedAt,
+        })
+        .from(userTable)
+        .where(inArray(userTable.id, customerUserIds)),
       db
         .select()
         .from(bankAccountsTable)
@@ -344,6 +353,9 @@ export async function getAdminKybCases(): Promise<AdminKybCase[]> {
             .orderBy(desc(kybCaseEventsTable.occurredAt))
         : Promise.resolve([]),
     ]);
+  const onboardingByUserId = new Map(
+    onboardingRows.map((row) => [row.id, row.onboardedAt]),
+  );
 
   const bankByUserId = new Map<string, (typeof bankRows)[number]>();
   const bankAccountsByUserId = new Map<
@@ -455,6 +467,12 @@ export async function getAdminKybCases(): Promise<AdminKybCase[]> {
       registrationDate: toIso(user.createdAt),
       submittedAt: toIso(caseRow?.submittedAt ?? user.createdAt),
       status: caseRow?.status ?? "not_started",
+      onboardingStatus: onboardingByUserId.get(user.id)
+        ? "approved"
+        : "pending",
+      onboardedAt: onboardingByUserId.get(user.id)
+        ? toIso(onboardingByUserId.get(user.id))
+        : undefined,
       reviewer: reviewer?.name ?? "Unassigned",
       riskLevel: caseRow?.riskLevel ?? "low",
       bankDetails: {
@@ -508,6 +526,81 @@ export const DASHBOARD_ADMIN_PROFILE_DOMAIN_ERRORS = {
   customerNotFound: "ADMIN_CUSTOMER_NOT_FOUND",
   cannotDisableSelf: "ADMIN_CANNOT_DISABLE_SELF",
 } as const;
+
+export async function onboardAdminInstitutionProfile(
+  _actorUserId: string,
+  caseRef: string,
+) {
+  const [targetCase] = await db
+    .select({
+      userId: kybCasesTable.userId,
+    })
+    .from(kybCasesTable)
+    .where(eq(kybCasesTable.caseRef, caseRef))
+    .limit(1);
+
+  const targetUserId = targetCase?.userId ?? caseRef;
+  if (!targetUserId) {
+    throw new Error(DASHBOARD_ADMIN_PROFILE_DOMAIN_ERRORS.customerNotFound);
+  }
+
+  return db.transaction(async (tx) => {
+    const [targetUser] = await tx
+      .select({
+        id: userTable.id,
+        onboardedAt: userTable.onboardedAt,
+      })
+      .from(userTable)
+      .where(and(eq(userTable.id, targetUserId), isNull(userTable.deletedAt)))
+      .limit(1);
+
+    if (!targetUser) {
+      throw new Error(DASHBOARD_ADMIN_PROFILE_DOMAIN_ERRORS.customerNotFound);
+    }
+
+    const now = new Date();
+    const nextOnboardedAt = targetUser.onboardedAt ?? now;
+
+    const [updated] = await tx
+      .update(userTable)
+      .set({
+        onboardedAt: nextOnboardedAt,
+        updatedAt: now,
+      })
+      .where(eq(userTable.id, targetUser.id))
+      .returning({
+        userId: userTable.id,
+        onboardedAt: userTable.onboardedAt,
+      });
+
+    if (!updated) {
+      throw new Error(DASHBOARD_ADMIN_PROFILE_DOMAIN_ERRORS.customerNotFound);
+    }
+
+    if (!targetUser.onboardedAt) {
+      await tx.insert(userNotificationsTable).values({
+        userId: targetUser.id,
+        category: "system",
+        title: "Account onboarded",
+        message: "Your account has been onboarded. You can now access your dashboard.",
+        channel: "in_app",
+        eventStatus: "approved",
+        entityType: "user",
+        entityRef: targetUser.id,
+        isRead: false,
+        readAt: null,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+
+    return {
+      userId: updated.userId,
+      onboardingStatus: "approved" as const,
+      onboardedAt: updated.onboardedAt ? toIso(updated.onboardedAt) : undefined,
+    };
+  });
+}
 
 export async function disableAdminInstitutionProfile(
   actorUserId: string,
@@ -733,37 +826,12 @@ export async function updateAdminKybCaseStatus(
       existing = createdCase;
     }
 
-    let nextStatus = input.status;
-    if (input.status === "approved") {
-      const [uploadedSubmission] = await tx
-        .select({ id: kybDocumentSubmissionsTable.id })
-        .from(kybCaseDocumentsTable)
-        .innerJoin(
-          kybDocumentSubmissionsTable,
-          eq(
-            kybDocumentSubmissionsTable.kybCaseDocumentId,
-            kybCaseDocumentsTable.id,
-          ),
-        )
-        .where(
-          and(
-            eq(kybCaseDocumentsTable.kybCaseId, existing.id),
-            isNotNull(kybDocumentSubmissionsTable.storageUri),
-          ),
-        )
-        .limit(1);
-
-      if (!uploadedSubmission) {
-        nextStatus = "needs_update";
-      }
-    }
-
     const [updated] = await tx
       .update(kybCasesTable)
       .set({
-        status: nextStatus,
+        status: input.status,
         reviewedAt:
-          nextStatus === "approved" || nextStatus === "rejected"
+          input.status === "approved" || input.status === "rejected"
             ? now
             : null,
         reviewerUserId: actorUserId,
@@ -775,8 +843,8 @@ export async function updateAdminKybCaseStatus(
 
     await tx.insert(kybCaseEventsTable).values({
       kybCaseId: existing.id,
-      label: toKybStatusLabel(nextStatus),
-      status: nextStatus,
+      label: toKybStatusLabel(input.status),
+      status: input.status,
       actorUserId,
       actorLabel: "Compliance",
       note: input.note ?? null,
@@ -788,23 +856,23 @@ export async function updateAdminKybCaseStatus(
       userId: existing.userId,
       category: "kyb",
       title:
-        nextStatus === "approved"
+        input.status === "approved"
           ? "KYB approved"
-          : nextStatus === "rejected"
+          : input.status === "rejected"
             ? "KYB rejected"
-            : nextStatus === "needs_update"
+            : input.status === "needs_update"
               ? "Additional KYB documents requested"
               : "KYB status updated",
       message:
-        nextStatus === "approved"
+        input.status === "approved"
           ? `Your KYB case ${existing.caseRef} is approved.`
-          : nextStatus === "rejected"
+          : input.status === "rejected"
             ? `Your KYB case ${existing.caseRef} is rejected.`
-            : nextStatus === "needs_update"
+            : input.status === "needs_update"
               ? `Your KYB case ${existing.caseRef} needs updated documents.`
-              : `Your KYB case ${existing.caseRef} status is ${nextStatus.replaceAll("_", " ")}.`,
+              : `Your KYB case ${existing.caseRef} status is ${input.status.replaceAll("_", " ")}.`,
       channel: "in_app",
-      eventStatus: nextStatus,
+      eventStatus: input.status,
       entityType: "kyb_case",
       entityRef: existing.caseRef,
       isRead: false,

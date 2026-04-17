@@ -18,6 +18,7 @@ import {
   getAdminOverviewState,
   getAdminReserveManagementState,
   getAdminWalletState,
+  onboardAdminInstitutionProfile,
   updateAdminWalletStatus,
   updateAdminKybDocumentStatus,
   updateAdminBankAccountStatus,
@@ -1907,6 +1908,43 @@ const dashboardRoutes = new Hono<AppEnv>()
           error.message === DASHBOARD_ADMIN_KYB_DOMAIN_ERRORS.caseNotFound
         ) {
           return c.json({ message: "KYB case not found" }, 404);
+        }
+        throw error;
+      }
+    },
+  )
+  .post(
+    "/admin/institutions/:caseRef/onboard",
+    requireAuth,
+    requirePermission("dashboard.manage"),
+    requirePermission("offchain.kyc_review"),
+    async (c) => {
+      const actorUserId = getCurrentUserId(c.get("user"));
+      if (!actorUserId) {
+        return c.json({ message: "Unauthorized" }, 401);
+      }
+
+      const caseRef = parsePathParam(c.req.param("caseRef"), {
+        field: "case reference",
+        maxLength: MAX_IDENTIFIER_LENGTH,
+      });
+      if (!caseRef.ok) {
+        return c.json({ message: "Invalid case reference" }, 400);
+      }
+
+      try {
+        const row = await onboardAdminInstitutionProfile(
+          actorUserId,
+          caseRef.value,
+        );
+        return c.json({ row });
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          error.message ===
+            DASHBOARD_ADMIN_PROFILE_DOMAIN_ERRORS.customerNotFound
+        ) {
+          return c.json({ message: "Customer profile not found" }, 404);
         }
         throw error;
       }

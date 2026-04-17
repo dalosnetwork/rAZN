@@ -1,7 +1,7 @@
 import { createMiddleware } from "hono/factory";
 import { hasAdminRole } from "@repo/auth/rbac";
-import { kybCasesTable, userTable } from "@repo/db";
-import { and, desc, eq, isNull } from "drizzle-orm";
+import { userTable } from "@repo/db";
+import { and, eq, isNull } from "drizzle-orm";
 
 import { auth } from "../lib/auth";
 import { db } from "../lib/db";
@@ -30,23 +30,18 @@ const DEFAULT_ONBOARDING_STATE: UserOnboardingPayload = {
   latestKybStatus: null,
 };
 
-async function resolveOnboardingState(userId: string, isAdmin: boolean) {
+function resolveOnboardingState(
+  onboardedAt: Date | null | undefined,
+  isAdmin: boolean,
+) {
   if (isAdmin) {
     return DEFAULT_ONBOARDING_STATE;
   }
 
-  const [latestKybCase] = await db
-    .select({ status: kybCasesTable.status })
-    .from(kybCasesTable)
-    .where(eq(kybCasesTable.userId, userId))
-    .orderBy(desc(kybCasesTable.submittedAt))
-    .limit(1);
-
-  const latestKybStatus = latestKybCase?.status ?? null;
   return {
     required: true,
-    isOnboarded: latestKybStatus === "approved",
-    latestKybStatus,
+    isOnboarded: Boolean(onboardedAt),
+    latestKybStatus: null,
   } satisfies UserOnboardingPayload;
 }
 
@@ -78,9 +73,13 @@ function buildRequireAuth(options: RequireAuthOptions = {}) {
 
     const userId =
       typeof payload.user?.id === "string" ? payload.user.id : null;
+    let activeUserOnboardedAt: Date | null | undefined = null;
     if (userId) {
       const [activeUser] = await db
-        .select({ id: userTable.id })
+        .select({
+          id: userTable.id,
+          onboardedAt: userTable.onboardedAt,
+        })
         .from(userTable)
         .where(and(eq(userTable.id, userId), isNull(userTable.deletedAt)))
         .limit(1);
@@ -88,13 +87,18 @@ function buildRequireAuth(options: RequireAuthOptions = {}) {
       if (!activeUser) {
         return c.json({ message: "Unauthorized" }, 401);
       }
+
+      activeUserOnboardedAt = activeUser.onboardedAt;
     }
 
     const access = userId ? await getUserAccess(userId) : DEFAULT_ACCESS;
     c.set("access", access);
 
     const onboarding = userId
-      ? await resolveOnboardingState(userId, hasAdminRole(access.roleSlugs))
+      ? resolveOnboardingState(
+          activeUserOnboardedAt,
+          hasAdminRole(access.roleSlugs),
+        )
       : DEFAULT_ONBOARDING_STATE;
     c.set("onboarding", onboarding);
 

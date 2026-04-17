@@ -10,6 +10,7 @@ import {
   disconnectWallet,
   getDashboardNotifications,
   disableAdminInstitutionProfile,
+  onboardAdminInstitution,
   getAdminInstitutionCases,
   getAdminMintOpsQueue,
   getAdminOverviewState,
@@ -39,6 +40,7 @@ import {
   type UploadKybDocumentInput,
   type DashboardNotificationsPayload,
   type DisableAdminInstitutionProfileInput,
+  type OnboardAdminInstitutionInput,
   type SetPrimaryWalletInput,
   type UpdateAdminInstitutionDocumentStatusInput,
   type UpdateAdminInstitutionStatusInput,
@@ -312,6 +314,20 @@ export function useDisableAdminInstitutionProfileMutation() {
           queryKey: dashboardQueryKeys.state,
         }),
       ]);
+    },
+  });
+}
+
+export function useOnboardAdminInstitutionMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: OnboardAdminInstitutionInput) =>
+      onboardAdminInstitution(input),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: dashboardQueryKeys.adminInstitutions,
+      });
     },
   });
 }

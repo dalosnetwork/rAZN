@@ -94,6 +94,8 @@ export type KybReviewCase = {
   registrationDate: string;
   submittedAt: string;
   status: MvpStatus;
+  onboardingStatus: "pending" | "approved";
+  onboardedAt?: string;
   reviewer: string;
   riskLevel: "low" | "medium" | "high";
   bankDetails: {
