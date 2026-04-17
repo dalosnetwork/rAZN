@@ -47,6 +47,7 @@ import {
   useUpdateAdminBankAccountStatusMutation,
   useAdminInstitutionsQuery,
   useUpdateAdminInstitutionDocumentStatusMutation,
+  useUpdateAdminInstitutionStatusMutation,
   useUpdateAdminWalletStatusMutation,
 } from "@/lib/queries/dashboard";
 import { hasAccessPermission } from "@/lib/rbac/route-access";
@@ -80,7 +81,9 @@ function buildColumns(
     {
       id: "customerId",
       header: tt("Customer ID"),
-      cell: (row) => row.customerId,
+      cell: (row) => (
+        <span className="block max-w-[18rem] break-all">{row.customerId}</span>
+      ),
     },
     {
       id: "customerName",
@@ -128,6 +131,7 @@ export default function Page() {
   const meQuery = useMeQuery();
   const adminInstitutionsQuery = useAdminInstitutionsQuery();
   const onboardInstitutionMutation = useOnboardAdminInstitutionMutation();
+  const updateInstitutionStatusMutation = useUpdateAdminInstitutionStatusMutation();
   const updateDocumentStatusMutation =
     useUpdateAdminInstitutionDocumentStatusMutation();
   const updateBankAccountStatusMutation = useUpdateAdminBankAccountStatusMutation();
@@ -212,6 +216,35 @@ export default function Page() {
         error instanceof Error
           ? error.message
           : tt("Could not onboard customer."),
+      );
+    }
+  }
+
+  async function updateKybCaseStatus(
+    caseRef: string,
+    status:
+      | "in_progress"
+      | "under_review"
+      | "approved"
+      | "rejected"
+      | "needs_update"
+      | "blocked",
+  ) {
+    const note = draftNote.trim() || undefined;
+
+    try {
+      await updateInstitutionStatusMutation.mutateAsync({
+        caseRef,
+        status,
+        note,
+      });
+      await adminInstitutionsQuery.refetch();
+      toast.success(tt("KYB status updated."));
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : tt("Could not update KYB status."),
       );
     }
   }
@@ -533,6 +566,36 @@ export default function Page() {
               >
                 {tt("Disable profile")}
               </Button>
+              <Button
+                variant="outline"
+                onClick={() =>
+                  void updateKybCaseStatus(selectedCase.customerId, "approved")
+                }
+                disabled={updateInstitutionStatusMutation.isPending}
+              >
+                {tt("Approve KYB")}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() =>
+                  void updateKybCaseStatus(
+                    selectedCase.customerId,
+                    "needs_update",
+                  )
+                }
+                disabled={updateInstitutionStatusMutation.isPending}
+              >
+                {tt("Request KYB update")}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() =>
+                  void updateKybCaseStatus(selectedCase.customerId, "rejected")
+                }
+                disabled={updateInstitutionStatusMutation.isPending}
+              >
+                {tt("Reject KYB")}
+              </Button>
             </div>
           ) : null
         }
@@ -558,7 +621,7 @@ export default function Page() {
                   <p className="text-muted-foreground text-xs">
                     {tt("Customer ID")}
                   </p>
-                  <p className="font-medium">{selectedCase.customerId}</p>
+                  <p className="break-all font-medium">{selectedCase.customerId}</p>
                 </div>
                 <div>
                   <p className="text-muted-foreground text-xs">
@@ -836,6 +899,25 @@ export default function Page() {
               <p className="font-medium text-sm">
                 {tt("Supporting documents for KYB")}
               </p>
+              {selectedCase.documents.length === 0 ? (
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border bg-muted/20 p-3">
+                  <p className="text-sm text-muted-foreground">
+                    {tt("No KYB checklist yet. Initialize the KYB case to start document review.")}
+                  </p>
+                  <Button
+                    size="sm"
+                    onClick={() =>
+                      void updateKybCaseStatus(
+                        selectedCase.customerId,
+                        "in_progress",
+                      )
+                    }
+                    disabled={updateInstitutionStatusMutation.isPending}
+                  >
+                    {tt("Initialize KYB checklist")}
+                  </Button>
+                </div>
+              ) : null}
               {selectedCase.documents.map((document) => (
                 <div
                   key={document.id}
