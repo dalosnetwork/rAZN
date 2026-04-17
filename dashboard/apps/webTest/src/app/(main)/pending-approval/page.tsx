@@ -95,7 +95,7 @@ export default function PendingApprovalPage() {
   };
 
   return (
-    <div className="relative flex min-h-dvh items-center justify-center overflow-hidden bg-background px-4 py-10 sm:px-6">
+    <div className="relative flex min-h-dvh items-center justify-center overflow-hidden bg-background px-4 py-15 sm:px-6">
       <div className="-z-10 pointer-events-none absolute inset-0">
         <div className="-top-24 absolute left-1/2 h-56 w-[36rem] -translate-x-1/2 rounded-full bg-primary/10 blur-3xl" />
         <div className="absolute right-0 bottom-0 h-52 w-52 rounded-full bg-emerald-400/10 blur-3xl" />

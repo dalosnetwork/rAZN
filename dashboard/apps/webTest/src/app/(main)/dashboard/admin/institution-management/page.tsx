@@ -558,15 +558,6 @@ export default function Page() {
                   : tt("Onboard")}
               </Button>
               <Button
-                variant="destructive"
-                onClick={() =>
-                  void disableInstitutionProfile(selectedCase.customerId)
-                }
-                disabled={disableInstitutionProfileMutation.isPending}
-              >
-                {tt("Disable profile")}
-              </Button>
-              <Button
                 variant="outline"
                 onClick={() =>
                   void updateKybCaseStatus(selectedCase.customerId, "approved")
@@ -595,6 +586,15 @@ export default function Page() {
                 disabled={updateInstitutionStatusMutation.isPending}
               >
                 {tt("Reject KYB")}
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={() =>
+                  void disableInstitutionProfile(selectedCase.customerId)
+                }
+                disabled={disableInstitutionProfileMutation.isPending}
+              >
+                {tt("Disable profile")}
               </Button>
             </div>
           ) : null
