@@ -1,7 +1,9 @@
 import { Hono } from "hono";
 
-import { getUserAccess } from "../lib/rbac";
-import { requireAuth } from "../middleware/auth";
+import {
+  requireAuth,
+  requireAuthAllowPendingOnboarding,
+} from "../middleware/auth";
 import type { AppEnv } from "../types";
 import { authRoutes } from "./auth";
 import { dashboardRoutes } from "./dashboard";
@@ -14,23 +16,12 @@ import { usersRoutes } from "./users";
  * GET /api/me and POST /api/register would 404.
  */
 const apiCompatRoutes = new Hono<AppEnv>()
-  .get("/me", requireAuth, async (c) => {
-    const user = c.get("user") as { id?: unknown } | null;
-    const userId = typeof user?.id === "string"
-      ? user.id
-      : null;
-
-    const access = userId
-      ? await getUserAccess(userId)
-      : {
-          roleSlugs: [],
-          permissionKeys: [],
-        };
-
+  .get("/me", requireAuthAllowPendingOnboarding, (c) => {
     return c.json({
       user: c.get("user"),
       session: c.get("session"),
-      access,
+      access: c.get("access"),
+      onboarding: c.get("onboarding"),
     });
   })
   .route("/dashboard", dashboardRoutes)
