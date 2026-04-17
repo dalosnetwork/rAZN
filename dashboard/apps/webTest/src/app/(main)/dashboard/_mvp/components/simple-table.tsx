@@ -147,7 +147,7 @@ export function MvpSimpleTable<T>({
       {hasPagination ? (
         <div className="flex flex-col gap-2 px-1 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-muted-foreground text-xs">
-            {tt(`Showing ${rangeFrom}-${rangeTo} of ${totalRows}`)}
+            {tt("Showing")} {rangeFrom}–{rangeTo} {tt("of")} {totalRows}
           </p>
           <div className="flex items-center gap-2">
             <Label htmlFor={rowsPerPageId} className="sr-only">
@@ -179,7 +179,7 @@ export function MvpSimpleTable<T>({
               </SelectContent>
             </Select>
             <p className="text-muted-foreground text-xs">
-              {tt(`Page ${pageIndex + 1} of ${totalPages}`)}
+              {tt("Page")} {pageIndex + 1} {tt("of")} {totalPages}
             </p>
             <Button
               variant="outline"

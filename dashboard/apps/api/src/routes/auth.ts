@@ -15,7 +15,6 @@ import type { AppEnv } from "../types";
 type LoginBody = {
   email?: string;
   password?: string;
-  rememberMe?: boolean;
   callbackURL?: string;
 };
 
@@ -35,7 +34,6 @@ function parseLoginPayload(
 ): ValidationResult<{
   email: string;
   password: string;
-  rememberMe?: boolean;
   callbackURL?: string;
 }> {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
@@ -59,10 +57,6 @@ function parseLoginPayload(
     return password;
   }
 
-  if (data.rememberMe !== undefined && typeof data.rememberMe !== "boolean") {
-    return { ok: false, message: "rememberMe must be boolean" };
-  }
-
   const callbackURL = parseOptionalSingleLineText(data.callbackURL, {
     field: "callbackURL",
     maxLength: MAX_CALLBACK_URL_LENGTH,
@@ -77,8 +71,6 @@ function parseLoginPayload(
     value: {
       email: email.value,
       password: password.value,
-      rememberMe:
-        typeof data.rememberMe === "boolean" ? data.rememberMe : undefined,
       callbackURL: callbackURL.value,
     },
   };
@@ -251,7 +243,6 @@ const authRoutes = new Hono<AppEnv>()
     const request = buildAuthRequest(c, "/auth/sign-in/email", {
       email: parsed.value.email,
       password: parsed.value.password,
-      rememberMe: parsed.value.rememberMe,
       callbackURL: parsed.value.callbackURL,
     });
 

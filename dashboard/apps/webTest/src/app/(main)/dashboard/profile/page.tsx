@@ -54,7 +54,7 @@ function formatRoleLabel(roleSlug: string) {
 export default function ProfilePage() {
   const { language, tx } = useI18n();
   const locale =
-    language === "tr" ? "tr-TR" : language === "ru" ? "ru-RU" : "en-US";
+    language === "tr" ? "tr-TR" : language === "ru" ? "ru-RU" : language === "az" ? "az-AZ" : "en-US";
   const meQuery = useMeQuery();
 
   if (meQuery.isPending) {
@@ -62,7 +62,7 @@ export default function ProfilePage() {
       <div className="flex min-h-32 items-center justify-center">
         <Spinner
           className="size-5"
-          aria-label={tx("Loading", "Yükleniyor", "Загрузка")}
+          aria-label={tx("Loading", "Yükleniyor", "Загрузка", "Yüklənir")}
         />
       </div>
     );

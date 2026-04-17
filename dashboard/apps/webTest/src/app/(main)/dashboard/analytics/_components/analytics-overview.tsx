@@ -113,7 +113,7 @@ const riskViews: Array<{
 export function AnalyticsOverview() {
   const { tx, language } = useI18n();
   const locale =
-    language === "tr" ? "tr-TR" : language === "ru" ? "ru-RU" : "en-US";
+    language === "tr" ? "tr-TR" : language === "ru" ? "ru-RU" : language === "az" ? "az-AZ" : "en-US";
   const [dateRange, setDateRange] = React.useState<{ from: Date; to: Date }>(
     () => {
       const to = startOfDay(new Date());

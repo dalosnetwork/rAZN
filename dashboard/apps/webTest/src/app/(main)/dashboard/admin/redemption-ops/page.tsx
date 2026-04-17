@@ -159,7 +159,7 @@ async function resolvePreferredConnector(connectors: readonly Connector[]) {
 }
 
 export default function Page() {
-  const { tt } = useI18n();
+  const { tt, tx } = useI18n();
   const redemptionOpsQueueQuery = useAdminRedemptionOpsQueueQuery();
   const updateRedemptionStatusMutation = useUpdateAdminRedemptionStatusMutation();
   const tokenChainId = React.useMemo(() => getTokenChainId(), []);

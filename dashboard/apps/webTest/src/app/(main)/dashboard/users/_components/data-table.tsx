@@ -46,7 +46,7 @@ export function UsersDataTable({
   disabledActionUserIds,
 }: Props) {
   const { language, tx } = useI18n();
-  const locale = language === "tr" ? "tr-TR" : language === "ru" ? "ru-RU" : "en-US";
+  const locale = language === "tr" ? "tr-TR" : language === "ru" ? "ru-RU" : language === "az" ? "az-AZ" : "en-US";
   const columns = React.useMemo(
     () =>
       createUsersColumns({

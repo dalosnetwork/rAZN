@@ -1,9 +1,3 @@
--> account overviewde nerelere componentlerden eklenebilir bak
-
-->grafik listesi 
-
-Upgrades: Proxy pattern for contract updates??
-
 
 -shafiq notes;
 
@@ -36,7 +30,7 @@ For admin:
 - mint requests
 - user registrations
 - security alerts
-done. but not dynamic (real)
+done. but not dynamic for now
 
 User sees "unauthorized" and clicking it opens an unauthorized error page. 
 done.
@@ -60,3 +54,15 @@ done.
 
 The admin roles are predefined. Is it possible to edit the roles via a defined policy list and we simply attach/detach policies from each role?
 done.
+
+
+-new notes;
+
+Although, the notification doesn't go away after viewing it. It's not a big deal anyway for now, whenever user clicks to notifications remove the badge;
+
+The banking section hides the IBAN and account number from both the admin and the user. We need it to be viewable so it wouldn't be an issue during withdrawal or deposit
+
+Seems to be an error here. The admin overview also shows user's overview, but when you click the overview button on the side panel, it goes back to normal
+When you login in as admin, the default URL opens to this: https://razn.dalosnetwork.com/dashboard/overview and not this https://razn.dalosnetwork.com/dashboard/admin/overview
+
+When signing up, we should implement an confirmation like a code or transactional email or token, etc. Because right now, any email, right or wrong can register and login.

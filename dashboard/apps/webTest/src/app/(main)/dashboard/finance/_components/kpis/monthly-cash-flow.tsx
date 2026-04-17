@@ -10,7 +10,7 @@ import { useFinanceMetrics } from "../use-finance-metrics";
 
 export function MonthlyCashFlow() {
   const { tx, language } = useI18n();
-  const locale = language === "tr" ? "tr-TR" : language === "ru" ? "ru-RU" : "en-US";
+  const locale = language === "tr" ? "tr-TR" : language === "ru" ? "ru-RU" : language === "az" ? "az-AZ" : "en-US";
   const { currentMonthNet, monthOverMonthPercent } = useFinanceMetrics(locale);
 
   const trendPrefix = currentMonthNet >= 0 ? "+" : "-";

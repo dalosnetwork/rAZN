@@ -32,7 +32,7 @@ const ADMIN_NOTIFICATION_KEYS = {
 } as const;
 
 export default function Page() {
-  const { tt } = useI18n();
+  const { tt, t } = useI18n();
   const dashboardStateQuery = useDashboardStateQuery();
   const updateSettingsMutation = useUpdateDashboardSettingsMutation();
 
@@ -350,9 +350,9 @@ export default function Page() {
                 <SelectValue placeholder={tt("Select language")} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="en">English</SelectItem>
-                <SelectItem value="tr">Turkce</SelectItem>
-                <SelectItem value="ru">Russian</SelectItem>
+                <SelectItem value="en">{t("language.english")}</SelectItem>
+                <SelectItem value="tr">{t("language.turkish")}</SelectItem>
+                <SelectItem value="ru">{t("language.russian")}</SelectItem>
               </SelectContent>
             </Select>
           </div>

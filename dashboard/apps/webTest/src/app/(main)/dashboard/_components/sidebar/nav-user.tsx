@@ -21,6 +21,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useLogoutMutation, useMeQuery } from "@/lib/queries/auth";
+import { canManageDashboard } from "@/lib/rbac/route-access";
 import {
   SidebarMenu,
   SidebarMenuButton,
@@ -36,6 +37,11 @@ export function NavUser() {
   const meQuery = useMeQuery();
   const logoutMutation = useLogoutMutation();
   const user = meQuery.data?.user;
+  const access = meQuery.data?.access;
+  const isAdminDashboard = canManageDashboard(access);
+  const settingsPath = isAdminDashboard
+    ? "/dashboard/admin/settings"
+    : "/dashboard/settings";
   const name = user?.name?.trim() || "User";
   const email = user?.email?.trim() || "";
   const avatar = user?.image || user?.avatar || "";
@@ -104,18 +110,18 @@ export function NavUser() {
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
-              <DropdownMenuItem
-                onSelect={() => router.push("/dashboard/settings")}
-              >
+              <DropdownMenuItem onSelect={() => router.push(settingsPath)}>
                 <Settings2 />
                 {t("sidebar.item.settings")}
               </DropdownMenuItem>
-              <DropdownMenuItem
-                onSelect={() => router.push("/dashboard/notifications")}
-              >
-                <MessageSquareDot />
-                {t("user.notifications")}
-              </DropdownMenuItem>
+              {!isAdminDashboard ? (
+                <DropdownMenuItem
+                  onSelect={() => router.push("/dashboard/notifications")}
+                >
+                  <MessageSquareDot />
+                  {t("user.notifications")}
+                </DropdownMenuItem>
+              ) : null}
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuItem

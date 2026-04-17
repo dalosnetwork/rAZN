@@ -14,7 +14,7 @@ export default function NotFound() {
       <p className="text-muted-foreground">
         {tt("The page you are looking for could not be found.")}
       </p>
-      <Link prefetch={false} replace href="/dashboard/overview">
+      <Link prefetch={false} replace href="/dashboard">
         <Button variant="outline">{tt("Go back home")}</Button>
       </Link>
     </div>

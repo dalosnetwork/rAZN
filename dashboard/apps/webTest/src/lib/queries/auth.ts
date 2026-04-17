@@ -2,7 +2,14 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { getMe, login, logout, register, type LoginInput, type RegisterInput } from "@/lib/api/auth";
+import {
+  getMe,
+  login,
+  logout,
+  register,
+  type LoginInput,
+  type RegisterInput,
+} from "@/lib/api/auth";
 
 export const authQueryKeys = {
   me: ["auth", "me"] as const,

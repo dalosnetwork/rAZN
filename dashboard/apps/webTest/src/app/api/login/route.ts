@@ -7,7 +7,6 @@ export async function POST(request: Request): Promise<Response> {
     const body = (await request.json()) as {
       email?: string;
       password?: string;
-      rememberMe?: boolean;
       callbackURL?: string;
     };
 
@@ -21,7 +20,6 @@ export async function POST(request: Request): Promise<Response> {
       body: {
         email: body.email,
         password: body.password,
-        rememberMe: body.rememberMe,
         callbackURL: body.callbackURL,
       },
     });

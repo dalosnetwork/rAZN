@@ -2,16 +2,20 @@ import { Hono } from "hono";
 import { SUPER_ADMIN_ROLE_SLUG } from "@repo/auth/rbac";
 
 import { listUsersWithRoles } from "../lib/users";
-import { requireAuth } from "../middleware/auth";
+import {
+  requireAuth,
+  requireAuthAllowPendingOnboarding,
+} from "../middleware/auth";
 import { requireRole, requireTableOperation } from "../middleware/rbac";
 import type { AppEnv } from "../types";
 
 const usersRoutes = new Hono<AppEnv>()
-  .get("/me", requireAuth, (c) => {
+  .get("/me", requireAuthAllowPendingOnboarding, (c) => {
     return c.json({
       user: c.get("user"),
       session: c.get("session"),
       access: c.get("access"),
+      onboarding: c.get("onboarding"),
     });
   })
   .get(

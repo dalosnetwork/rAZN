@@ -152,7 +152,7 @@ function createLedgerColumns(tx: TxFn): ColumnDef<RiskLedgerRow>[] {
 export function ActionsRiskLedger() {
   const { tx, language } = useI18n();
   const locale =
-    language === "tr" ? "tr-TR" : language === "ru" ? "ru-RU" : "en-US";
+    language === "tr" ? "tr-TR" : language === "ru" ? "ru-RU" : language === "az" ? "az-AZ" : "en-US";
   const now = new Date();
   const from = new Date(now);
   from.setDate(from.getDate() - 83);

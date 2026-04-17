@@ -154,7 +154,7 @@ async function resolvePreferredConnector(connectors: readonly Connector[]) {
 }
 
 export default function Page() {
-  const { tt } = useI18n();
+  const { tt, tx } = useI18n();
   const mintOpsQueueQuery = useAdminMintOpsQueueQuery();
   const updateMintStatusMutation = useUpdateAdminMintStatusMutation();
   const tokenChainId = React.useMemo(() => getTokenChainId(), []);

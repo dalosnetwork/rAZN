@@ -78,14 +78,26 @@ const DASHBOARD_ROUTE_RULES: DashboardRouteRule[] = [
     pathPrefix: "/dashboard/coming-soon",
     allowedRoles: [SUPER_ADMIN_ROLE_SLUG],
   },
-  { pathPrefix: "/dashboard/overview", requiredPermission: "dashboard.view" },
+  {
+    pathPrefix: "/dashboard/overview",
+    requiredPermission: "dashboard.view",
+    disallowAdmin: true,
+  },
   {
     pathPrefix: "/dashboard/mint",
     requiredPermission: "dashboard.view",
     disallowAdmin: true,
   },
-  { pathPrefix: "/dashboard/redeem", requiredPermission: "dashboard.view" },
-  { pathPrefix: "/dashboard/kyb", requiredPermission: "dashboard.view" },
+  {
+    pathPrefix: "/dashboard/redeem",
+    requiredPermission: "dashboard.view",
+    disallowAdmin: true,
+  },
+  {
+    pathPrefix: "/dashboard/kyb",
+    requiredPermission: "dashboard.view",
+    disallowAdmin: true,
+  },
   {
     pathPrefix: "/dashboard/notifications",
     requiredPermission: "dashboard.view",
@@ -94,8 +106,27 @@ const DASHBOARD_ROUTE_RULES: DashboardRouteRule[] = [
   {
     pathPrefix: "/dashboard/reserve-transparency",
     requiredPermission: "dashboard.view",
+    disallowAdmin: true,
   },
-  { pathPrefix: "/dashboard", requiredPermission: "dashboard.view" },
+  {
+    pathPrefix: "/dashboard/wallet",
+    requiredPermission: "dashboard.view",
+    disallowAdmin: true,
+  },
+  {
+    pathPrefix: "/dashboard/banking",
+    requiredPermission: "dashboard.view",
+    disallowAdmin: true,
+  },
+  {
+    pathPrefix: "/dashboard/settings",
+    requiredPermission: "dashboard.view",
+    disallowAdmin: true,
+  },
+  {
+    pathPrefix: "/dashboard",
+    requiredAnyPermissions: ["dashboard.view", "dashboard.manage"],
+  },
 ];
 
 function hasRole(access: UserAccess, roleSlug: RoleSlug) {
@@ -136,6 +167,14 @@ export function hasAccessPermission(
 
 export function canManageDashboard(access: UserAccess | null | undefined) {
   return hasAccessPermission(access, "dashboard.manage");
+}
+
+export function getDefaultDashboardPath(
+  access: UserAccess | null | undefined,
+) {
+  return canManageDashboard(access)
+    ? "/dashboard/admin/overview"
+    : "/dashboard/overview";
 }
 
 function matchRule(pathname: string) {

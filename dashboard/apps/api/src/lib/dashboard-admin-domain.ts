@@ -224,6 +224,7 @@ export type AdminKybCase = {
     bankName: string;
     accountName: string;
     ibanMasked: string;
+    accountNumberMasked: string;
     swiftCode: string;
     status: string;
     addedAt?: string;
@@ -233,6 +234,7 @@ export type AdminKybCase = {
     bankName: string;
     accountName: string;
     ibanMasked: string;
+    accountNumberMasked: string;
     swiftCode: string;
     status: string;
     addedAt: string;
@@ -358,6 +360,7 @@ export async function getAdminKybCases(): Promise<AdminKybCase[]> {
       bankName: row.bankName,
       accountName: row.accountHolder,
       ibanMasked: row.ibanMasked,
+      accountNumberMasked: row.accountNumberMasked ?? "-",
       swiftCode: row.swiftCode ?? "-",
       status: row.status,
       addedAt: toIso(row.createdAt),
@@ -459,6 +462,7 @@ export async function getAdminKybCases(): Promise<AdminKybCase[]> {
         bankName: bank?.bankName ?? "-",
         accountName: bank?.accountHolder ?? "-",
         ibanMasked: bank?.ibanMasked ?? "-",
+        accountNumberMasked: bank?.accountNumberMasked ?? "-",
         swiftCode: bank?.swiftCode ?? "-",
         status: bank?.status ?? "inactive",
         addedAt: bank?.createdAt ? toIso(bank.createdAt) : undefined,

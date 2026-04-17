@@ -13,7 +13,7 @@ import { useCrmMetrics } from "./use-crm-metrics";
 export function InsightCards() {
   const { tx, language } = useI18n();
   const locale =
-    language === "tr" ? "tr-TR" : language === "ru" ? "ru-RU" : "en-US";
+    language === "tr" ? "tr-TR" : language === "ru" ? "ru-RU" : language === "az" ? "az-AZ" : "en-US";
   const { railDistribution, stageRows } = useCrmMetrics(locale);
 
   const leadsBySourceChartData = railDistribution.map((entry) => ({

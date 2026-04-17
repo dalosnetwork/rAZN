@@ -9,6 +9,7 @@ import { useI18n } from "@/components/providers/language-provider";
 import { useMeQuery } from "@/lib/queries/auth";
 import {
   canAccessDashboardPath,
+  getDefaultDashboardPath,
   type UserAccess,
 } from "@/lib/rbac/route-access";
 
@@ -16,9 +17,10 @@ type Props = {
   children: ReactNode;
 };
 
-const DEFAULT_AUTHENTICATED_PATH = "/dashboard/overview";
+const DEFAULT_AUTHENTICATED_PATH = "/dashboard";
 const LOGIN_PATH = "/auth/v1/login";
 const UNAUTHORIZED_PATH = "/unauthorized";
+const PENDING_APPROVAL_PATH = "/pending-approval";
 const EMPTY_ACCESS: UserAccess = {
   roleSlugs: [],
   permissionKeys: [],
@@ -44,8 +46,13 @@ export function AuthGate({ children }: Props) {
 
   const isAuthPage = pathname.startsWith("/auth");
   const isPublic = isPublicPath(pathname);
+  const isPendingApprovalPage = pathname === PENDING_APPROVAL_PATH;
   const hasUser = Boolean(meQuery.data?.user);
   const access = meQuery.data?.access ?? EMPTY_ACCESS;
+  const onboarding = meQuery.data?.onboarding;
+  const hasPendingOnboarding = Boolean(
+    hasUser && onboarding?.required && !onboarding.isOnboarded,
+  );
   const hasDashboardAccess = hasUser
     ? canAccessDashboardPath(pathname, access)
     : true;
@@ -55,12 +62,28 @@ export function AuthGate({ children }: Props) {
   }, [pathname]);
 
   useEffect(() => {
+    if (!hasPendingOnboarding) {
+      return;
+    }
+
+    const refreshTimer = window.setInterval(() => {
+      void meQuery.refetch();
+    }, 15_000);
+
+    return () => window.clearInterval(refreshTimer);
+  }, [hasPendingOnboarding, meQuery.refetch]);
+
+  useEffect(() => {
     if (meQuery.isPending) {
       return;
     }
 
     if (isAuthPage && hasUser) {
-      router.replace(DEFAULT_AUTHENTICATED_PATH);
+      router.replace(
+        hasPendingOnboarding
+          ? PENDING_APPROVAL_PATH
+          : getDefaultDashboardPath(access),
+      );
       return;
     }
 
@@ -72,12 +95,25 @@ export function AuthGate({ children }: Props) {
       return;
     }
 
+    if (hasPendingOnboarding && !isPendingApprovalPage) {
+      router.replace(PENDING_APPROVAL_PATH);
+      return;
+    }
+
+    if (!hasPendingOnboarding && hasUser && isPendingApprovalPage) {
+      router.replace(getDefaultDashboardPath(access));
+      return;
+    }
+
     if (!isPublic && hasUser && !hasDashboardAccess) {
       router.replace(UNAUTHORIZED_PATH);
     }
   }, [
     hasDashboardAccess,
+    hasPendingOnboarding,
     hasUser,
+    isPendingApprovalPage,
+    access,
     isAuthPage,
     isPublic,
     meQuery.isPending,
@@ -90,7 +126,7 @@ export function AuthGate({ children }: Props) {
       <div className="flex min-h-dvh items-center justify-center">
         <Spinner
           className="size-5"
-          aria-label={tx("Loading", "Yükleniyor", "Загрузка")}
+          aria-label={tx("Loading", "Yükleniyor", "Загрузка", "Yüklənir")}
         />
       </div>
     );
@@ -98,6 +134,8 @@ export function AuthGate({ children }: Props) {
 
   if (
     (isAuthPage && hasUser) ||
+    (hasPendingOnboarding && !isPendingApprovalPage) ||
+    (isPendingApprovalPage && hasUser && !hasPendingOnboarding) ||
     (!isPublic && (!hasUser || !hasDashboardAccess))
   ) {
     return null;

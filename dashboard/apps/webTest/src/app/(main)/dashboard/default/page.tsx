@@ -111,14 +111,14 @@ export default function Page() {
   return (
     <div className="@container/main flex flex-col gap-4 md:gap-6">
       <MvpPageHeader
-        title="Default Dashboard"
-        description="Live storage-backed operational metrics, activity feed, and latest users."
+        title={tt("Default Dashboard")}
+        description={tt("Live storage-backed operational metrics, activity feed, and latest users.")}
       />
 
       {isLoading ? <MvpInlineLoading /> : null}
       {queryError ? (
         <MvpErrorAlert
-          title="Could not load dashboard data"
+          title={tt("Could not load dashboard data")}
           description={
             queryError instanceof Error
               ? queryError.message
@@ -131,54 +131,54 @@ export default function Page() {
         <>
           <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
             <MvpKpiCard
-              label="Total circulating supply"
+              label={tt("Total circulating supply")}
               value={formatCurrency(adminKpis?.totalCirculatingSupply ?? 0)}
-              hint="From live admin overview state"
+              hint={tt("From live admin overview state")}
               status="active"
             />
             <MvpKpiCard
-              label="Reserve coverage"
+              label={tt("Reserve coverage")}
               value={formatPercent(adminKpis?.reserveCoverage ?? 0)}
-              hint="Latest coverage ratio"
+              hint={tt("Latest coverage ratio")}
               status="active"
             />
             <MvpKpiCard
-              label="Outstanding requests"
+              label={tt("Outstanding requests")}
               value={formatNumber(overviewCards?.pendingRequests ?? 0)}
-              hint="Open mint and redeem requests"
+              hint={tt("Open mint and redeem requests")}
               status="under_review"
             />
             <MvpKpiCard
-              label="Active users"
+              label={tt("Active users")}
               value={formatNumber(usersQuery.data?.pagination.total ?? 0)}
-              hint="Total users from storage"
+              hint={tt("Total users from storage")}
               status="queued"
             />
           </section>
 
           <MvpSectionCard
-            title="Recent activity"
-            description="Most recent mint, redeem, and KYB events."
+            title={tt("Recent activity")}
+            description={tt("Most recent mint, redeem, and KYB events.")}
           >
             <MvpSimpleTable
               columns={activityColumns}
               data={recentActivity}
               getRowId={(row) => row.id}
-              emptyTitle="No activity yet"
-              emptyDescription="Events will appear when users interact with the system."
+              emptyTitle={tt("No activity yet")}
+              emptyDescription={tt("Events will appear when users interact with the system.")}
             />
           </MvpSectionCard>
 
           <MvpSectionCard
-            title="Latest users"
-            description="Most recently created users from the database."
+            title={tt("Latest users")}
+            description={tt("Most recently created users from the database.")}
           >
             <MvpSimpleTable
               columns={userColumns}
               data={recentUsers}
               getRowId={(row) => row.id}
-              emptyTitle="No users found"
-              emptyDescription="User records will appear here after registration."
+              emptyTitle={tt("No users found")}
+              emptyDescription={tt("User records will appear here after registration.")}
             />
           </MvpSectionCard>
         </>

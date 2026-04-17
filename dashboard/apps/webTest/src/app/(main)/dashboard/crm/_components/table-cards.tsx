@@ -18,7 +18,7 @@ import { useCrmMetrics } from "./use-crm-metrics";
 export function TableCards() {
   const { tx, language } = useI18n();
   const locale =
-    language === "tr" ? "tr-TR" : language === "ru" ? "ru-RU" : "en-US";
+    language === "tr" ? "tr-TR" : language === "ru" ? "ru-RU" : language === "az" ? "az-AZ" : "en-US";
   const { recentRequestRows } = useCrmMetrics(locale);
   const recentLeadsColumns = useMemo(() => createCrmRequestColumns(tx), [tx]);
   const table = useDataTableInstance({

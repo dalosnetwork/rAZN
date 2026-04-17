@@ -7,7 +7,7 @@ import { useFinanceMetrics } from "./use-finance-metrics";
 
 export function SpendingBreakdown() {
   const { tx, language } = useI18n();
-  const locale = language === "tr" ? "tr-TR" : language === "ru" ? "ru-RU" : "en-US";
+  const locale = language === "tr" ? "tr-TR" : language === "ru" ? "ru-RU" : language === "az" ? "az-AZ" : "en-US";
   const { spendingByRail } = useFinanceMetrics(locale);
   const total = spendingByRail.reduce((sum, item) => sum + item.amount, 0);
 

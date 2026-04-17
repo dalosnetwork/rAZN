@@ -16,6 +16,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useLogoutMutation, useMeQuery } from "@/lib/queries/auth";
+import { canManageDashboard } from "@/lib/rbac/route-access";
 import { getInitials } from "@/lib/utils";
 
 export function AccountSwitcher() {
@@ -24,6 +25,11 @@ export function AccountSwitcher() {
   const meQuery = useMeQuery();
   const logoutMutation = useLogoutMutation();
   const user = meQuery.data?.user;
+  const access = meQuery.data?.access;
+  const isAdminDashboard = canManageDashboard(access);
+  const settingsPath = isAdminDashboard
+    ? "/dashboard/admin/settings"
+    : "/dashboard/settings";
   const name = user?.name?.trim() || "User";
   const email = user?.email?.trim() || "";
   const avatar = user?.image || user?.avatar || "";
@@ -66,14 +72,18 @@ export function AccountSwitcher() {
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
-          <DropdownMenuItem onSelect={() => router.push("/dashboard/settings")}>
+          <DropdownMenuItem onSelect={() => router.push(settingsPath)}>
             <Settings2 />
             {t("sidebar.item.settings")}
           </DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => router.push("/dashboard/notifications")}>
-            <Bell />
-            {t("user.notifications")}
-          </DropdownMenuItem>
+          {!isAdminDashboard ? (
+            <DropdownMenuItem
+              onSelect={() => router.push("/dashboard/notifications")}
+            >
+              <Bell />
+              {t("user.notifications")}
+            </DropdownMenuItem>
+          ) : null}
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuItem onSelect={() => void handleLogout()} disabled={logoutMutation.isPending}>

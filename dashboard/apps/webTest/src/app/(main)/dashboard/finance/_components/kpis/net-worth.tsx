@@ -10,7 +10,7 @@ import { useFinanceMetrics } from "../use-finance-metrics";
 
 export function NetWorth() {
   const { tx, language } = useI18n();
-  const locale = language === "tr" ? "tr-TR" : language === "ru" ? "ru-RU" : "en-US";
+  const locale = language === "tr" ? "tr-TR" : language === "ru" ? "ru-RU" : language === "az" ? "az-AZ" : "en-US";
   const { totalWalletBalance, monthOverMonthNetDelta } = useFinanceMetrics(locale);
 
   const deltaLabel = `${monthOverMonthNetDelta >= 0 ? "+" : "-"}${formatCurrency(Math.abs(monthOverMonthNetDelta), {

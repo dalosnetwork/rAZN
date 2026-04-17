@@ -149,6 +149,7 @@ export type AdminInstitutionCase = {
     bankName: string;
     accountName: string;
     ibanMasked: string;
+    accountNumberMasked: string;
     swiftCode: string;
     status: MvpStatus;
     addedAt?: string;
@@ -158,6 +159,7 @@ export type AdminInstitutionCase = {
     bankName: string;
     accountName: string;
     ibanMasked: string;
+    accountNumberMasked: string;
     swiftCode: string;
     status: MvpStatus;
     addedAt: string;

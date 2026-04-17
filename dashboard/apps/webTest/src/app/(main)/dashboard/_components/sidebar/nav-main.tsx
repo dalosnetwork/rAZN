@@ -237,9 +237,35 @@ export function NavMain({ items }: NavMainProps) {
   const soonLabel = t("sidebar.soon");
   const notificationRows = notificationsQuery.data?.rows ?? [];
   const unreadCount = notificationsQuery.data?.pagination.unreadCount ?? 0;
+  const [isNotificationBadgeDismissed, setIsNotificationBadgeDismissed] =
+    React.useState(false);
   const hasInitializedToastRef = React.useRef(false);
   const previousRowIdsRef = React.useRef<Set<string>>(new Set());
   const hasMarkedNotificationsRef = React.useRef(false);
+  const previousUnreadCountRef = React.useRef(unreadCount);
+
+  React.useEffect(() => {
+    if (path.startsWith("/dashboard/notifications")) {
+      setIsNotificationBadgeDismissed(true);
+    }
+  }, [path]);
+
+  React.useEffect(() => {
+    const previousUnreadCount = previousUnreadCountRef.current;
+    if (isNotificationBadgeDismissed) {
+      if (unreadCount === 0) {
+        setIsNotificationBadgeDismissed(false);
+      } else if (
+        !path.startsWith("/dashboard/notifications") &&
+        unreadCount > previousUnreadCount
+      ) {
+        setIsNotificationBadgeDismissed(false);
+      }
+    }
+    previousUnreadCountRef.current = unreadCount;
+  }, [isNotificationBadgeDismissed, path, unreadCount]);
+
+  const visibleUnreadCount = isNotificationBadgeDismissed ? 0 : unreadCount;
 
   React.useEffect(() => {
     if (!showNotificationsQuickAction) {
@@ -333,9 +359,9 @@ export function NavMain({ items }: NavMainProps) {
                     <Link prefetch={false} href="/dashboard/mint">
                       <Coins />
                       <span>{mintLabel}</span>
-                      {showNotificationsQuickAction && unreadCount > 0 && (
+                      {showNotificationsQuickAction && visibleUnreadCount > 0 && (
                         <span className="absolute top-1 right-1 hidden min-h-4 min-w-4 items-center justify-center rounded-full bg-primary-foreground px-1 text-[10px] text-primary leading-none group-data-[collapsible=icon]:inline-flex">
-                          {unreadCount > 99 ? "99+" : unreadCount}
+                          {visibleUnreadCount > 99 ? "99+" : visibleUnreadCount}
                         </span>
                       )}
                     </Link>
@@ -346,12 +372,15 @@ export function NavMain({ items }: NavMainProps) {
                     size="icon"
                     className="relative h-9 w-9 shrink-0 group-data-[collapsible=icon]:opacity-0"
                     variant="outline"
-                    onClick={() => router.push("/dashboard/notifications")}
+                    onClick={() => {
+                      setIsNotificationBadgeDismissed(true);
+                      router.push("/dashboard/notifications");
+                    }}
                   >
                     <Bell />
-                    {unreadCount > 0 && (
+                    {visibleUnreadCount > 0 && (
                       <span className="-right-1 -top-1 absolute inline-flex min-h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] text-primary-foreground leading-none">
-                        {unreadCount > 99 ? "99+" : unreadCount}
+                        {visibleUnreadCount > 99 ? "99+" : visibleUnreadCount}
                       </span>
                     )}
                     <span className="sr-only">{inboxLabel}</span>

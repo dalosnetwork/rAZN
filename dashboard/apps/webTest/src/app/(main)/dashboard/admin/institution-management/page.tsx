@@ -2,6 +2,7 @@
 
 import * as React from "react";
 
+import { CopyIcon } from "lucide-react";
 import { toast } from "sonner";
 
 import { MvpDetailDrawer } from "@/app/(main)/dashboard/_mvp/components/detail-drawer";
@@ -124,7 +125,7 @@ function buildColumns(
 }
 
 export default function Page() {
-  const { tt } = useI18n();
+  const { tt, tx } = useI18n();
   const meQuery = useMeQuery();
   const adminInstitutionsQuery = useAdminInstitutionsQuery();
   const updateInstitutionStatusMutation = useUpdateAdminInstitutionStatusMutation();
@@ -367,6 +368,21 @@ export default function Page() {
     }
   }
 
+  async function copyBankValue(value: string, label: string) {
+    const normalizedValue = value.trim();
+    if (!normalizedValue || normalizedValue === "-") {
+      toast.error(tt(`${label} is not available.`));
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(normalizedValue);
+      toast.success(tt(`${label} copied to clipboard.`));
+    } catch {
+      toast.error(tt(`Could not copy ${label}.`));
+    }
+  }
+
   const selectedCaseBankAccounts = React.useMemo(() => {
     if (!selectedCase) {
       return [];
@@ -381,6 +397,7 @@ export default function Page() {
           bankName: selectedCase.bankDetails.bankName,
           accountName: selectedCase.bankDetails.accountName,
           ibanMasked: selectedCase.bankDetails.ibanMasked,
+          accountNumberMasked: selectedCase.bankDetails.accountNumberMasked ?? "-",
           swiftCode: selectedCase.bankDetails.swiftCode,
           status: selectedCase.bankDetails.status,
           addedAt: selectedCase.bankDetails.addedAt ?? new Date(0).toISOString(),
@@ -646,9 +663,50 @@ export default function Page() {
                             </span>{" "}
                             {account.accountName}
                           </p>
-                          <p>
-                            <span className="text-muted-foreground">{tt("IBAN")}:</span>{" "}
-                            {account.ibanMasked}
+                          <p className="flex flex-wrap items-center gap-1">
+                            <span className="text-muted-foreground">{tt("IBAN")}:</span>
+                            <span className="font-mono text-xs">{account.ibanMasked}</span>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-6 w-6"
+                              disabled={
+                                account.ibanMasked.trim() === "-" ||
+                                account.ibanMasked.trim() === ""
+                              }
+                              onClick={() => void copyBankValue(account.ibanMasked, "IBAN")}
+                            >
+                              <CopyIcon className="size-3.5" />
+                              <span className="sr-only">{tt("Copy IBAN")}</span>
+                            </Button>
+                          </p>
+                          <p className="flex flex-wrap items-center gap-1">
+                            <span className="text-muted-foreground">
+                              {tt("Account number")}:
+                            </span>
+                            <span className="font-mono text-xs">
+                              {account.accountNumberMasked ?? "-"}
+                            </span>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-6 w-6"
+                              disabled={
+                                (account.accountNumberMasked ?? "").trim() === "-" ||
+                                (account.accountNumberMasked ?? "").trim() === ""
+                              }
+                              onClick={() =>
+                                void copyBankValue(
+                                  account.accountNumberMasked ?? "",
+                                  tt("Account number"),
+                                )
+                              }
+                            >
+                              <CopyIcon className="size-3.5" />
+                              <span className="sr-only">{tt("Copy account number")}</span>
+                            </Button>
                           </p>
                           <p>
                             <span className="text-muted-foreground">{tt("SWIFT")}:</span>{" "}

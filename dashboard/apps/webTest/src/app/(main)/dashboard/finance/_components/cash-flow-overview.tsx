@@ -42,7 +42,7 @@ type CashFlowPeriod = "this-month" | "last-6-months" | "ytd" | "this-year";
 export function CashFlowOverview() {
   const { tx, language } = useI18n();
   const locale =
-    language === "tr" ? "tr-TR" : language === "ru" ? "ru-RU" : "en-US";
+    language === "tr" ? "tr-TR" : language === "ru" ? "ru-RU" : language === "az" ? "az-AZ" : "en-US";
   const [period, setPeriod] = useState<CashFlowPeriod>("this-year");
   const { monthlyFlow } = useFinanceMetrics(locale);
 

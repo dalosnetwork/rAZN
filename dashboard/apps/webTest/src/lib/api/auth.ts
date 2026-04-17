@@ -1,7 +1,6 @@
 export type LoginInput = {
   email: string;
   password: string;
-  rememberMe?: boolean;
   callbackURL?: string;
 };
 
@@ -35,10 +34,17 @@ export type MeAccess = {
   permissionKeys: string[];
 };
 
+export type MeOnboarding = {
+  required: boolean;
+  isOnboarded: boolean;
+  latestKybStatus: string | null;
+};
+
 type MeResponse = {
   user: MeUser;
   session: unknown;
   access: MeAccess;
+  onboarding: MeOnboarding;
 };
 
 function getErrorMessage(payload: ApiErrorPayload | null, fallback: string) {
@@ -109,11 +115,17 @@ export async function getMe(): Promise<MeResponse | null> {
     roleSlugs: [],
     permissionKeys: [],
   };
+  const onboarding = payload.onboarding ?? {
+    required: false,
+    isOnboarded: true,
+    latestKybStatus: null,
+  };
 
   return {
     user: payload.user,
     session: payload.session,
     access,
+    onboarding,
   };
 }
 

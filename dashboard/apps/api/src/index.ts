@@ -1,8 +1,14 @@
-import "dotenv/config";
+import { resolve } from "node:path";
+import { config as loadEnv } from "dotenv";
 
 import { serve } from "@hono/node-server";
-import "./lib/db";
-import { app } from "./app";
+
+// Load service-local env first, then workspace-level env as fallback.
+loadEnv({ path: resolve(process.cwd(), ".env"), override: false });
+loadEnv({ path: resolve(process.cwd(), "../../.env"), override: false });
+
+await import("./lib/db");
+const { app } = await import("./app");
 
 const port = Number(process.env.PORT ?? 3002);
 

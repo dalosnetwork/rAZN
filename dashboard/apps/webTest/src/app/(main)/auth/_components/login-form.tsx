@@ -9,7 +9,6 @@ import { z } from "zod";
 import { useI18n } from "@/components/providers/language-provider";
 import { useLoginMutation } from "@/lib/queries/auth";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Form,
   FormControl,
@@ -20,7 +19,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 
-const DEFAULT_REDIRECT_PATH = "/dashboard/overview";
+const DEFAULT_REDIRECT_PATH = "/dashboard";
 
 function getSafeRedirectPath(pathname: string | null) {
   if (!pathname || !pathname.startsWith("/") || pathname.startsWith("//")) {
@@ -53,7 +52,6 @@ export function LoginForm() {
           "Пароль должен содержать не менее 6 символов.",
         ),
       }),
-    remember: z.boolean().optional(),
   });
 
   const form = useForm<z.infer<typeof FormSchema>>({
@@ -61,7 +59,6 @@ export function LoginForm() {
     defaultValues: {
       email: "",
       password: "",
-      remember: false,
     },
   });
 
@@ -70,7 +67,6 @@ export function LoginForm() {
       await loginMutation.mutateAsync({
         email: data.email,
         password: data.password,
-        rememberMe: data.remember,
       });
 
       const search =
@@ -127,28 +123,6 @@ export function LoginForm() {
                 />
               </FormControl>
               <FormMessage />
-            </FormItem>
-          )}
-        />
-        <FormField
-          control={form.control}
-          name="remember"
-          render={({ field }) => (
-            <FormItem className="flex flex-row items-center">
-              <FormControl>
-                <Checkbox
-                  id="login-remember"
-                  checked={field.value}
-                  onCheckedChange={field.onChange}
-                  className="size-4"
-                />
-              </FormControl>
-              <FormLabel
-                htmlFor="login-remember"
-                className="ml-1 font-medium text-muted-foreground text-sm"
-              >
-                {t("auth.rememberMe30Days")}
-              </FormLabel>
             </FormItem>
           )}
         />

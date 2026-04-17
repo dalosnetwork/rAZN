@@ -18,31 +18,8 @@ export type CreateAuthOptions = {
   options?: Omit<BetterAuthInput, "database" | "secret" | "baseURL">;
 };
 
-function getGoogleProviderFromEnv(): NonNullable<BetterAuthInput["socialProviders"]> {
-  const clientId = process.env.GOOGLE_CLIENT_ID?.trim();
-  const clientSecret = process.env.GOOGLE_CLIENT_SECRET?.trim();
-
-  if (!clientId || !clientSecret) {
-    return {};
-  }
-
-  return {
-    google: {
-      clientId,
-      clientSecret,
-      accessType: "offline",
-      prompt: "consent",
-    },
-  };
-}
-
 export function createAuth({ databaseUrl, secret, baseURL, options }: CreateAuthOptions) {
   const db = createDb(databaseUrl);
-  const configuredSocialProviders: NonNullable<BetterAuthInput["socialProviders"]> = {
-    ...getGoogleProviderFromEnv(),
-    ...(options?.socialProviders ?? {}),
-  };
-  const hasSocialProviders = Object.keys(configuredSocialProviders).length > 0;
 
   return betterAuth({
     ...options,
@@ -50,7 +27,6 @@ export function createAuth({ databaseUrl, secret, baseURL, options }: CreateAuth
       enabled: true,
       ...options?.emailAndPassword,
     },
-    socialProviders: hasSocialProviders ? configuredSocialProviders : undefined,
     baseURL,
     secret,
     database: drizzleAdapter(db, {

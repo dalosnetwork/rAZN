@@ -15,7 +15,7 @@ import { useCrmMetrics } from "./use-crm-metrics";
 export function OperationalCards() {
   const { tx, tt, language } = useI18n();
   const locale =
-    language === "tr" ? "tr-TR" : language === "ru" ? "ru-RU" : "en-US";
+    language === "tr" ? "tr-TR" : language === "ru" ? "ru-RU" : language === "az" ? "az-AZ" : "en-US";
   const { stageRows, countryRows, actionItems } = useCrmMetrics(locale);
 
   const salesPipelineChartData = stageRows.map((row, index) => ({

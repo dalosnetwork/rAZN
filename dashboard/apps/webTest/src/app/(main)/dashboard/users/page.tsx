@@ -169,7 +169,7 @@ export default function UsersPage() {
         <div className="flex min-h-32 items-center justify-center">
           <Spinner
             className="size-5"
-            aria-label={tx("Loading", "Yükleniyor", "Загрузка")}
+            aria-label={tx("Loading", "Yükleniyor", "Загрузка", "Yüklənir")}
           />
         </div>
       ) : !isSuperAdmin ? (
@@ -184,7 +184,7 @@ export default function UsersPage() {
         <div className="flex min-h-32 items-center justify-center">
           <Spinner
             className="size-5"
-            aria-label={tx("Loading", "Yükleniyor", "Загрузка")}
+            aria-label={tx("Loading", "Yükleniyor", "Загрузка", "Yüklənir")}
           />
         </div>
       ) : usersQuery.isError ? (

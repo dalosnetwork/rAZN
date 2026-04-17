@@ -2,6 +2,7 @@
 
 import * as React from "react";
 
+import { CopyIcon } from "lucide-react";
 import { toast } from "sonner";
 
 import { MvpDetailDrawer } from "@/app/(main)/dashboard/_mvp/components/detail-drawer";
@@ -85,26 +86,9 @@ function canAddOwnBankAccount(access: UserAccess | null | undefined) {
   return hasAccessPermission(access, "settings.view");
 }
 
-function maskIban(rawIban: string) {
-  const trimmed = rawIban.replaceAll(/\s+/g, "");
-  if (trimmed.length < 8) {
-    return trimmed;
-  }
-
-  return `${trimmed.slice(0, 2)}**${trimmed.slice(2, 6)}****${trimmed.slice(-4)}`;
-}
-
-function maskAccountNumber(rawAccountNumber: string) {
-  const trimmed = rawAccountNumber.replaceAll(/\s+/g, "");
-  if (trimmed.length <= 4) {
-    return trimmed;
-  }
-
-  return `${"*".repeat(Math.max(0, trimmed.length - 4))}${trimmed.slice(-4)}`;
-}
-
 function buildColumns(
   onOpen: (account: BankAccount) => void,
+  onCopy: (value: string, label: string) => Promise<void> | void,
   tt: (en: string) => string,
 ): MvpTableColumn<BankAccount>[] {
   return [
@@ -131,14 +115,43 @@ function buildColumns(
       id: "iban",
       header: tt("IBAN"),
       cell: (row) => (
-        <span className="font-mono text-xs">{row.ibanMasked}</span>
+        <div className="flex items-center gap-1">
+          <span className="font-mono text-xs">{row.ibanMasked}</span>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6"
+            disabled={row.ibanMasked.trim() === "-" || row.ibanMasked.trim() === ""}
+            onClick={() => void onCopy(row.ibanMasked, "IBAN")}
+          >
+            <CopyIcon className="size-3.5" />
+            <span className="sr-only">{tt("Copy IBAN")}</span>
+          </Button>
+        </div>
       ),
     },
     {
       id: "accountNumber",
       header: tt("Account number"),
       cell: (row) => (
-        <span className="font-mono text-xs">{row.accountNumberMasked}</span>
+        <div className="flex items-center gap-1">
+          <span className="font-mono text-xs">{row.accountNumberMasked}</span>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6"
+            disabled={
+              row.accountNumberMasked.trim() === "-" ||
+              row.accountNumberMasked.trim() === ""
+            }
+            onClick={() => void onCopy(row.accountNumberMasked, tt("Account number"))}
+          >
+            <CopyIcon className="size-3.5" />
+            <span className="sr-only">{tt("Copy account number")}</span>
+          </Button>
+        </div>
       ),
     },
     {
@@ -219,10 +232,27 @@ export default function Page() {
     (account) => account.status === "verified",
   ).length;
   const primaryAccount = accounts.find((account) => account.isPrimary);
+  const handleCopyValue = React.useCallback(
+    async (value: string, label: string) => {
+      const normalizedValue = value.trim();
+      if (!normalizedValue || normalizedValue === "-") {
+        toast.error(`${label} ${tx("is not available.", "kullanılamıyor.", "недоступен.", "mövcud deyil.")}`);
+        return;
+      }
+
+      try {
+        await navigator.clipboard.writeText(normalizedValue);
+        toast.success(`${label} ${tx("copied to clipboard.", "panoya kopyalandı.", "скопировано в буфер обмена.", "buferə kopyalandı.")}`);
+      } catch {
+        toast.error(`${tx("Could not copy", "Kopyalanamadı:", "Не удалось скопировать:", "Kopyalana bilmədi:")} ${label}.`);
+      }
+    },
+    [tt],
+  );
 
   const columns = React.useMemo(
-    () => buildColumns(setSelectedAccount, tt),
-    [tt],
+    () => buildColumns(setSelectedAccount, handleCopyValue, tt),
+    [handleCopyValue, tt],
   );
 
   function setFormField<K extends keyof NewBankAccountForm>(
@@ -254,8 +284,8 @@ export default function Page() {
       await createBankAccountMutation.mutateAsync({
         accountHolder: form.accountHolder.trim(),
         bankName: form.bankName.trim(),
-        ibanMasked: maskIban(form.iban),
-        accountNumberMasked: maskAccountNumber(form.accountNumber),
+        ibanMasked: form.iban.trim(),
+        accountNumberMasked: form.accountNumber.trim(),
         bankAddress: form.bankAddress.trim(),
         swiftCode: form.swiftCode.trim() || undefined,
         country: form.country,
@@ -408,10 +438,10 @@ export default function Page() {
                 <SelectValue placeholder={tt("Select country")} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="United Kingdom">United Kingdom</SelectItem>
-                <SelectItem value="United States">United States</SelectItem>
-                <SelectItem value="Turkey">Turkey</SelectItem>
-                <SelectItem value="Germany">Germany</SelectItem>
+                <SelectItem value="United Kingdom">{tt("United Kingdom")}</SelectItem>
+                <SelectItem value="United States">{tt("United States")}</SelectItem>
+                <SelectItem value="Turkey">{tt("Turkey")}</SelectItem>
+                <SelectItem value="Germany">{tt("Germany")}</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -470,15 +500,54 @@ export default function Page() {
             </div>
             <div>
               <p className="text-muted-foreground text-xs">{tt("IBAN")}</p>
-              <p className="font-mono text-xs">{selectedAccount.ibanMasked}</p>
+              <div className="flex items-center gap-1">
+                <p className="font-mono text-xs">{selectedAccount.ibanMasked}</p>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6"
+                  disabled={
+                    selectedAccount.ibanMasked.trim() === "-" ||
+                    selectedAccount.ibanMasked.trim() === ""
+                  }
+                  onClick={() =>
+                    void handleCopyValue(selectedAccount.ibanMasked, "IBAN")
+                  }
+                >
+                  <CopyIcon className="size-3.5" />
+                  <span className="sr-only">{tt("Copy IBAN")}</span>
+                </Button>
+              </div>
             </div>
             <div>
               <p className="text-muted-foreground text-xs">
                 {tt("Account number")}
               </p>
-              <p className="font-mono text-xs">
-                {selectedAccount.accountNumberMasked}
-              </p>
+              <div className="flex items-center gap-1">
+                <p className="font-mono text-xs">
+                  {selectedAccount.accountNumberMasked}
+                </p>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6"
+                  disabled={
+                    selectedAccount.accountNumberMasked.trim() === "-" ||
+                    selectedAccount.accountNumberMasked.trim() === ""
+                  }
+                  onClick={() =>
+                    void handleCopyValue(
+                      selectedAccount.accountNumberMasked,
+                      tt("Account number"),
+                    )
+                  }
+                >
+                  <CopyIcon className="size-3.5" />
+                  <span className="sr-only">{tt("Copy account number")}</span>
+                </Button>
+              </div>
             </div>
             <div>
               <p className="text-muted-foreground text-xs">
