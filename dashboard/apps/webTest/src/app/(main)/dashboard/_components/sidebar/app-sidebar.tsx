@@ -5,7 +5,6 @@ import Link from "next/link";
 import {
   CircleHelp,
   ClipboardList,
-  Command,
   Database,
   File,
   Search,
@@ -13,6 +12,7 @@ import {
 } from "lucide-react";
 import { useShallow } from "zustand/react/shallow";
 
+import { BrandLogo } from "@/components/brand-logo";
 import {
   Sidebar,
   SidebarContent,
@@ -96,7 +96,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           <SidebarMenuItem>
             <SidebarMenuButton asChild>
               <Link prefetch={false} href={dashboardHomeHref}>
-                <Command />
+                <BrandLogo className="shrink-0" />
                 <span className="font-semibold text-base">
                   {APP_CONFIG.name}
                 </span>

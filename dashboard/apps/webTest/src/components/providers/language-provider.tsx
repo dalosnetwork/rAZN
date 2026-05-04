@@ -17,6 +17,7 @@ import {
 } from "@/lib/i18n/config";
 import { messages, type TranslationKey } from "@/lib/i18n/messages";
 import { AZ_TX_FALLBACK } from "@/lib/i18n/az-fallback";
+import { getLocalStorageValue, setLocalStorageValue } from "@/lib/local-storage.client";
 import { RU_TX_FALLBACK } from "@/lib/i18n/ru-fallback";
 import { TR_TX_FALLBACK } from "@/lib/i18n/tr-fallback";
 
@@ -34,14 +35,14 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
   const [language, setLanguage] = useState<Language>(DEFAULT_LANGUAGE);
 
   useEffect(() => {
-    const saved = window.localStorage.getItem(LANGUAGE_STORAGE_KEY);
+    const saved = getLocalStorageValue(LANGUAGE_STORAGE_KEY);
     if (saved && isLanguage(saved)) {
       setLanguage(saved);
     }
   }, []);
 
   useEffect(() => {
-    window.localStorage.setItem(LANGUAGE_STORAGE_KEY, language);
+    setLocalStorageValue(LANGUAGE_STORAGE_KEY, language);
     document.documentElement.lang = language;
   }, [language]);
 

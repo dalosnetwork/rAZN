@@ -47,6 +47,30 @@ type MeResponse = {
   onboarding: MeOnboarding;
 };
 
+function toStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.filter((entry): entry is string => typeof entry === "string");
+}
+
+function normalizeAccess(value: unknown): MeAccess {
+  const candidate = value && typeof value === "object" ? (value as Record<string, unknown>) : null;
+  return {
+    roleSlugs: toStringArray(candidate?.roleSlugs),
+    permissionKeys: toStringArray(candidate?.permissionKeys),
+  };
+}
+
+function normalizeOnboarding(value: unknown): MeOnboarding {
+  const candidate = value && typeof value === "object" ? (value as Record<string, unknown>) : null;
+  return {
+    required: Boolean(candidate?.required),
+    isOnboarded: Boolean(candidate?.isOnboarded),
+    latestKybStatus: typeof candidate?.latestKybStatus === "string" ? candidate.latestKybStatus : null,
+  };
+}
+
 function getErrorMessage(payload: ApiErrorPayload | null, fallback: string) {
   return payload?.error?.message ?? payload?.message ?? fallback;
 }
@@ -111,15 +135,14 @@ export async function getMe(): Promise<MeResponse | null> {
     return null;
   }
 
-  const access = payload.access ?? {
-    roleSlugs: [],
-    permissionKeys: [],
-  };
-  const onboarding = payload.onboarding ?? {
-    required: false,
-    isOnboarded: true,
-    latestKybStatus: null,
-  };
+  const access = normalizeAccess(payload.access);
+  const onboarding = payload.onboarding
+    ? normalizeOnboarding(payload.onboarding)
+    : {
+        required: false,
+        isOnboarded: true,
+        latestKybStatus: null,
+      };
 
   return {
     user: payload.user,

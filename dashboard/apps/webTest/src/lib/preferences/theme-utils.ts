@@ -1,5 +1,26 @@
 import type { ResolvedThemeMode, ThemeMode } from "./theme";
 
+function subscribeToMediaQueryChange(
+  media: MediaQueryList,
+  listener: (event: MediaQueryListEvent) => void,
+) {
+  if (typeof media.addEventListener === "function") {
+    media.addEventListener("change", listener);
+    return () => {
+      media.removeEventListener("change", listener);
+    };
+  }
+
+  if (typeof media.addListener === "function") {
+    media.addListener(listener);
+    return () => {
+      media.removeListener(listener);
+    };
+  }
+
+  return () => undefined;
+}
+
 export function resolveThemeMode(mode: ThemeMode): ResolvedThemeMode {
   if (mode === "system") {
     const prefersDark = window.matchMedia?.("(prefers-color-scheme: dark)")?.matches;
@@ -34,9 +55,5 @@ export function subscribeToSystemTheme(onChange: (mode: ResolvedThemeMode) => vo
     onChange(event.matches ? "dark" : "light");
   };
 
-  media.addEventListener("change", listener);
-
-  return () => {
-    media.removeEventListener("change", listener);
-  };
+  return subscribeToMediaQueryChange(media, listener);
 }

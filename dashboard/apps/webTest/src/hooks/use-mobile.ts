@@ -2,6 +2,20 @@ import * as React from "react";
 
 const MOBILE_BREAKPOINT = 768;
 
+function subscribeToMediaQueryChange(mql: MediaQueryList, onChange: () => void) {
+  if (typeof mql.addEventListener === "function") {
+    mql.addEventListener("change", onChange);
+    return () => mql.removeEventListener("change", onChange);
+  }
+
+  if (typeof mql.addListener === "function") {
+    mql.addListener(onChange);
+    return () => mql.removeListener(onChange);
+  }
+
+  return () => undefined;
+}
+
 export function useIsMobile() {
   const [isMobile, setIsMobile] = React.useState<boolean | undefined>(undefined);
 
@@ -10,9 +24,9 @@ export function useIsMobile() {
     const onChange = () => {
       setIsMobile(window.innerWidth < MOBILE_BREAKPOINT);
     };
-    mql.addEventListener("change", onChange);
+    const unsubscribe = subscribeToMediaQueryChange(mql, onChange);
     setIsMobile(window.innerWidth < MOBILE_BREAKPOINT);
-    return () => mql.removeEventListener("change", onChange);
+    return unsubscribe;
   }, []);
 
   return !!isMobile;

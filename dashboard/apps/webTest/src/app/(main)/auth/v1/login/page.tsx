@@ -2,8 +2,7 @@
 
 import Link from "next/link";
 
-import { Command } from "lucide-react";
-
+import { BrandLogo } from "@/components/brand-logo";
 import { LanguageSwitcher } from "@/components/language-switcher";
 import { useI18n } from "@/components/providers/language-provider";
 
@@ -20,7 +19,11 @@ export default function LoginV1() {
       <div className="hidden bg-primary lg:block lg:w-1/3">
         <div className="flex h-full flex-col items-center justify-center p-12 text-center">
           <div className="space-y-6">
-            <Command className="mx-auto size-12 text-primary-foreground" />
+            <BrandLogo
+              onPrimary
+              className="mx-auto"
+              imageClassName="h-9 w-9"
+            />
             <div className="space-y-2">
               <h1 className="font-light text-5xl text-primary-foreground">{t("auth.helloAgain")}</h1>
               <p className="text-primary-foreground/80 text-xl">{t("auth.loginToContinue")}</p>

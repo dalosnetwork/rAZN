@@ -74,7 +74,7 @@ export function AuthGate({ children }: Props) {
   }, [hasPendingOnboarding, meQuery.refetch]);
 
   useEffect(() => {
-    if (meQuery.isPending) {
+    if (meQuery.isPending || meQuery.isError) {
       return;
     }
 
@@ -116,6 +116,7 @@ export function AuthGate({ children }: Props) {
     access,
     isAuthPage,
     isPublic,
+    meQuery.isError,
     meQuery.isPending,
     pathname,
     router,
@@ -128,6 +129,52 @@ export function AuthGate({ children }: Props) {
           className="size-5"
           aria-label={tx("Loading", "Yükleniyor", "Загрузка", "Yüklənir")}
         />
+      </div>
+    );
+  }
+
+  if (meQuery.isError && !isPublic) {
+    return (
+      <div className="flex min-h-dvh flex-col items-center justify-center gap-4 px-6 text-center">
+        <h1 className="font-semibold text-xl">
+          {tx(
+            "Could not verify your session",
+            "Oturumunuz doğrulanamadı",
+            "Не удалось проверить вашу сессию",
+            "Sessiyanızı təsdiqləmək mümkün olmadı",
+          )}
+        </h1>
+        <p className="max-w-lg text-muted-foreground text-sm">
+          {tx(
+            "Please retry. If the issue continues, sign in again.",
+            "Lütfen tekrar deneyin. Sorun devam ederse tekrar giriş yapın.",
+            "Повторите попытку. Если проблема сохранится, войдите снова.",
+            "Zəhmət olmasa yenidən cəhd edin. Problem davam edərsə, yenidən daxil olun.",
+          )}
+        </p>
+        <div className="flex flex-wrap items-center justify-center gap-3">
+          <button
+            type="button"
+            onClick={() => {
+              void meQuery.refetch();
+            }}
+            className="inline-flex h-10 items-center rounded-md bg-primary px-4 text-primary-foreground text-sm hover:bg-primary/90"
+          >
+            {tx("Retry", "Tekrar Dene", "Повторить", "Yenidən cəhd et")}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              const search =
+                typeof window !== "undefined" ? window.location.search : "";
+              const nextPath = getSafeInternalPath(`${pathname}${search}`);
+              router.replace(`${LOGIN_PATH}?next=${encodeURIComponent(nextPath)}`);
+            }}
+            className="inline-flex h-10 items-center rounded-md border px-4 text-sm hover:bg-accent hover:text-accent-foreground"
+          >
+            {tx("Go to login", "Girişe git", "Перейти ко входу", "Giriş səhifəsinə keç")}
+          </button>
+        </div>
       </div>
     );
   }
