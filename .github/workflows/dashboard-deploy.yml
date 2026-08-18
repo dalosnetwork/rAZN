@@ -1,0 +1,182 @@
+name: Dashboard Deploy
+
+on:
+  workflow_run:
+    workflows:
+      - Dashboard CI
+    types:
+      - completed
+    branches:
+      - dev
+      - main
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Deployment target
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dashboard-deploy-${{ github.event_name == 'workflow_dispatch' && inputs.target || github.event.workflow_run.head_branch }}
+  cancel-in-progress: false
+
+jobs:
+  deploy-staging:
+    name: Deploy staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: staging
+    if: >-
+      (github.event_name == 'workflow_run' &&
+        github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.head_branch == 'dev') ||
+      (github.event_name == 'workflow_dispatch' && inputs.target == 'staging')
+    env:
+      DEPLOY_BRANCH: dev
+      DEPLOY_HOST: ${{ secrets.STAGING_SSH_HOST }}
+      DEPLOY_PORT: ${{ secrets.STAGING_SSH_PORT || '22' }}
+      DEPLOY_USER: ${{ secrets.STAGING_SSH_USER }}
+      DEPLOY_SSH_KEY: ${{ secrets.STAGING_SSH_KEY }}
+      DEPLOY_PATH: ${{ secrets.STAGING_DEPLOY_PATH }}
+      DEPLOY_COMMAND: ${{ secrets.STAGING_DEPLOY_COMMAND }}
+      DEPLOY_SERVICES: ${{ secrets.STAGING_DEPLOY_SERVICES || 'postgres pgbouncer redis api web' }}
+      HEALTH_URL: ${{ secrets.STAGING_HEALTH_URL }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Validate staging secrets
+        run: |
+          set -euo pipefail
+          missing=0
+          for name in DEPLOY_HOST DEPLOY_PORT DEPLOY_USER DEPLOY_SSH_KEY; do
+            if [ -z "${!name}" ]; then
+              echo "::error::${name} is required for staging deploy"
+              missing=1
+            fi
+          done
+          if [ -z "$DEPLOY_PATH" ] && [ -z "$DEPLOY_COMMAND" ]; then
+            echo "::error::DEPLOY_PATH or DEPLOY_COMMAND is required for staging deploy"
+            missing=1
+          fi
+          exit "$missing"
+
+      - name: Configure SSH
+        run: |
+          set -euo pipefail
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p "$DEPLOY_PORT" -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+
+      - name: Deploy staging over SSH
+        run: |
+          set -euo pipefail
+          remote_env="DEPLOY_PATH=$(printf '%q' "$DEPLOY_PATH") DEPLOY_BRANCH=$(printf '%q' "$DEPLOY_BRANCH") DEPLOY_COMMAND=$(printf '%q' "$DEPLOY_COMMAND") DEPLOY_SERVICES=$(printf '%q' "$DEPLOY_SERVICES")"
+          ssh -i ~/.ssh/deploy_key -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" "$remote_env bash -s" <<'REMOTE'
+          set -euo pipefail
+          if [ -n "$DEPLOY_COMMAND" ]; then
+            echo "Running deploy command: $DEPLOY_COMMAND $DEPLOY_BRANCH"
+            sudo "$DEPLOY_COMMAND" "$DEPLOY_BRANCH"
+            exit 0
+          fi
+          cd "$DEPLOY_PATH"
+          git fetch origin "$DEPLOY_BRANCH"
+          git checkout "$DEPLOY_BRANCH"
+          git pull --ff-only origin "$DEPLOY_BRANCH"
+          git rev-parse HEAD
+          cd dashboard
+          echo "Deploying services: $DEPLOY_SERVICES"
+          docker compose -f docker-compose.yml up -d --build $DEPLOY_SERVICES
+          docker compose -f docker-compose.yml ps $DEPLOY_SERVICES
+          REMOTE
+
+      - name: Verify staging health
+        if: env.HEALTH_URL != ''
+        run: |
+          set -euo pipefail
+          curl -fsS --retry 5 --retry-delay 5 "$HEALTH_URL"
+
+  deploy-production:
+    name: Deploy production
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
+    if: >-
+      (github.event_name == 'workflow_run' &&
+        github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.head_branch == 'main') ||
+      (github.event_name == 'workflow_dispatch' && inputs.target == 'production')
+    env:
+      DEPLOY_BRANCH: main
+      DEPLOY_HOST: ${{ secrets.PRODUCTION_SSH_HOST }}
+      DEPLOY_PORT: ${{ secrets.PRODUCTION_SSH_PORT || '22' }}
+      DEPLOY_USER: ${{ secrets.PRODUCTION_SSH_USER }}
+      DEPLOY_SSH_KEY: ${{ secrets.PRODUCTION_SSH_KEY }}
+      DEPLOY_PATH: ${{ secrets.PRODUCTION_DEPLOY_PATH }}
+      DEPLOY_COMMAND: ${{ secrets.PRODUCTION_DEPLOY_COMMAND }}
+      DEPLOY_SERVICES: ${{ secrets.PRODUCTION_DEPLOY_SERVICES || 'postgres pgbouncer redis api web' }}
+      HEALTH_URL: ${{ secrets.PRODUCTION_HEALTH_URL }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Validate production secrets
+        run: |
+          set -euo pipefail
+          missing=0
+          for name in DEPLOY_HOST DEPLOY_PORT DEPLOY_USER DEPLOY_SSH_KEY; do
+            if [ -z "${!name}" ]; then
+              echo "::error::${name} is required for production deploy"
+              missing=1
+            fi
+          done
+          if [ -z "$DEPLOY_PATH" ] && [ -z "$DEPLOY_COMMAND" ]; then
+            echo "::error::DEPLOY_PATH or DEPLOY_COMMAND is required for production deploy"
+            missing=1
+          fi
+          exit "$missing"
+
+      - name: Configure SSH
+        run: |
+          set -euo pipefail
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p "$DEPLOY_PORT" -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+
+      - name: Deploy production over SSH
+        run: |
+          set -euo pipefail
+          remote_env="DEPLOY_PATH=$(printf '%q' "$DEPLOY_PATH") DEPLOY_BRANCH=$(printf '%q' "$DEPLOY_BRANCH") DEPLOY_COMMAND=$(printf '%q' "$DEPLOY_COMMAND") DEPLOY_SERVICES=$(printf '%q' "$DEPLOY_SERVICES")"
+          ssh -i ~/.ssh/deploy_key -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" "$remote_env bash -s" <<'REMOTE'
+          set -euo pipefail
+          if [ -n "$DEPLOY_COMMAND" ]; then
+            echo "Running deploy command: $DEPLOY_COMMAND $DEPLOY_BRANCH"
+            sudo "$DEPLOY_COMMAND" "$DEPLOY_BRANCH"
+            exit 0
+          fi
+          cd "$DEPLOY_PATH"
+          git fetch origin "$DEPLOY_BRANCH"
+          git checkout "$DEPLOY_BRANCH"
+          git pull --ff-only origin "$DEPLOY_BRANCH"
+          git rev-parse HEAD
+          cd dashboard
+          echo "Deploying services: $DEPLOY_SERVICES"
+          docker compose -f docker-compose.yml up -d --build $DEPLOY_SERVICES
+          docker compose -f docker-compose.yml ps $DEPLOY_SERVICES
+          REMOTE
+
+      - name: Verify production health
+        if: env.HEALTH_URL != ''
+        run: |
+          set -euo pipefail
+          curl -fsS --retry 5 --retry-delay 5 "$HEALTH_URL"
