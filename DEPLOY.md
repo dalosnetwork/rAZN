@@ -254,8 +254,13 @@ For the current Docker Compose production-style stack:
 
 ```sh
 cd dashboard
-docker compose -f docker-compose.yml up -d --build
+docker compose -f docker-compose.yml up -d --build postgres pgbouncer redis api web
 ```
+
+If a server uses a shared edge reverse proxy, keep that proxy outside the
+application deploy. In that setup, do not restart the Compose `caddy` service
+from the dashboard deploy workflow unless the edge proxy has intentionally been
+moved back into this stack.
 
 After production deploy:
 
@@ -343,9 +348,13 @@ git fetch origin <branch>
 git checkout <branch>
 git pull --ff-only origin <branch>
 cd dashboard
-docker compose -f docker-compose.yml up -d --build
-docker compose -f docker-compose.yml ps
+docker compose -f docker-compose.yml up -d --build postgres pgbouncer redis api web
+docker compose -f docker-compose.yml ps postgres pgbouncer redis api web
 ```
+
+By default, the deploy workflow intentionally leaves `caddy` alone because some
+servers use a shared edge Caddy instance for multiple apps. Override the service
+list only when the target environment is intentionally different.
 
 Required GitHub environment secrets for `staging`:
 
@@ -355,6 +364,7 @@ Required GitHub environment secrets for `staging`:
 - `STAGING_SSH_KEY`
 - `STAGING_DEPLOY_PATH`
 - `STAGING_HEALTH_URL` (optional)
+- `STAGING_DEPLOY_SERVICES` (optional, defaults to `postgres pgbouncer redis api web`)
 
 Required GitHub environment secrets for `production`:
 
@@ -364,6 +374,7 @@ Required GitHub environment secrets for `production`:
 - `PRODUCTION_SSH_KEY`
 - `PRODUCTION_DEPLOY_PATH`
 - `PRODUCTION_HEALTH_URL` (optional)
+- `PRODUCTION_DEPLOY_SERVICES` (optional, defaults to `postgres pgbouncer redis api web`)
 
 `STAGING_DEPLOY_PATH` and `PRODUCTION_DEPLOY_PATH` must point to the repository
 root on the target server. Example:

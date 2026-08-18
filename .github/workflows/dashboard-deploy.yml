@@ -44,6 +44,7 @@ jobs:
       DEPLOY_USER: ${{ secrets.STAGING_SSH_USER }}
       DEPLOY_SSH_KEY: ${{ secrets.STAGING_SSH_KEY }}
       DEPLOY_PATH: ${{ secrets.STAGING_DEPLOY_PATH }}
+      DEPLOY_SERVICES: ${{ secrets.STAGING_DEPLOY_SERVICES || 'postgres pgbouncer redis api web' }}
       HEALTH_URL: ${{ secrets.STAGING_HEALTH_URL }}
 
     steps:
@@ -73,7 +74,7 @@ jobs:
       - name: Deploy staging over SSH
         run: |
           set -euo pipefail
-          remote_env="DEPLOY_PATH=$(printf '%q' "$DEPLOY_PATH") DEPLOY_BRANCH=$(printf '%q' "$DEPLOY_BRANCH")"
+          remote_env="DEPLOY_PATH=$(printf '%q' "$DEPLOY_PATH") DEPLOY_BRANCH=$(printf '%q' "$DEPLOY_BRANCH") DEPLOY_SERVICES=$(printf '%q' "$DEPLOY_SERVICES")"
           ssh -i ~/.ssh/deploy_key -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" "$remote_env bash -s" <<'REMOTE'
           set -euo pipefail
           cd "$DEPLOY_PATH"
@@ -82,8 +83,9 @@ jobs:
           git pull --ff-only origin "$DEPLOY_BRANCH"
           git rev-parse HEAD
           cd dashboard
-          docker compose -f docker-compose.yml up -d --build
-          docker compose -f docker-compose.yml ps
+          echo "Deploying services: $DEPLOY_SERVICES"
+          docker compose -f docker-compose.yml up -d --build $DEPLOY_SERVICES
+          docker compose -f docker-compose.yml ps $DEPLOY_SERVICES
           REMOTE
 
       - name: Verify staging health
@@ -109,6 +111,7 @@ jobs:
       DEPLOY_USER: ${{ secrets.PRODUCTION_SSH_USER }}
       DEPLOY_SSH_KEY: ${{ secrets.PRODUCTION_SSH_KEY }}
       DEPLOY_PATH: ${{ secrets.PRODUCTION_DEPLOY_PATH }}
+      DEPLOY_SERVICES: ${{ secrets.PRODUCTION_DEPLOY_SERVICES || 'postgres pgbouncer redis api web' }}
       HEALTH_URL: ${{ secrets.PRODUCTION_HEALTH_URL }}
 
     steps:
@@ -138,7 +141,7 @@ jobs:
       - name: Deploy production over SSH
         run: |
           set -euo pipefail
-          remote_env="DEPLOY_PATH=$(printf '%q' "$DEPLOY_PATH") DEPLOY_BRANCH=$(printf '%q' "$DEPLOY_BRANCH")"
+          remote_env="DEPLOY_PATH=$(printf '%q' "$DEPLOY_PATH") DEPLOY_BRANCH=$(printf '%q' "$DEPLOY_BRANCH") DEPLOY_SERVICES=$(printf '%q' "$DEPLOY_SERVICES")"
           ssh -i ~/.ssh/deploy_key -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" "$remote_env bash -s" <<'REMOTE'
           set -euo pipefail
           cd "$DEPLOY_PATH"
@@ -147,8 +150,9 @@ jobs:
           git pull --ff-only origin "$DEPLOY_BRANCH"
           git rev-parse HEAD
           cd dashboard
-          docker compose -f docker-compose.yml up -d --build
-          docker compose -f docker-compose.yml ps
+          echo "Deploying services: $DEPLOY_SERVICES"
+          docker compose -f docker-compose.yml up -d --build $DEPLOY_SERVICES
+          docker compose -f docker-compose.yml ps $DEPLOY_SERVICES
           REMOTE
 
       - name: Verify production health
