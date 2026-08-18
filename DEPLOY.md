@@ -340,8 +340,11 @@ file must exist on the repository default branch before automatic deploys can
 start. Manual dispatch remains available from the Actions UI once the workflow
 exists on GitHub.
 
-The deploy workflow connects to the configured server over SSH, updates the
-target branch, and rebuilds the Docker Compose stack:
+The deploy workflow connects to the configured server over SSH. It can either
+run the inline deploy flow from `DEPLOY_PATH`, or call a root-owned deploy
+command configured through `DEPLOY_COMMAND`.
+
+Default inline deploy flow:
 
 ```sh
 git fetch origin <branch>
@@ -356,13 +359,25 @@ By default, the deploy workflow intentionally leaves `caddy` alone because some
 servers use a shared edge Caddy instance for multiple apps. Override the service
 list only when the target environment is intentionally different.
 
+For shared servers, prefer a dedicated SSH user plus a narrow root-owned deploy
+command instead of giving the deploy user broad Docker access. Example command
+path:
+
+```text
+/usr/local/bin/razn-dashboard-deploy
+```
+
+That command should accept only `dev` or `main`, update the known repository
+path, rebuild the intended dashboard services, and leave the shared edge proxy
+alone.
+
 Required GitHub environment secrets for `staging`:
 
 - `STAGING_SSH_HOST`
 - `STAGING_SSH_PORT` (optional, defaults to `22`)
 - `STAGING_SSH_USER`
 - `STAGING_SSH_KEY`
-- `STAGING_DEPLOY_PATH`
+- `STAGING_DEPLOY_PATH` or `STAGING_DEPLOY_COMMAND`
 - `STAGING_HEALTH_URL` (optional)
 - `STAGING_DEPLOY_SERVICES` (optional, defaults to `postgres pgbouncer redis api web`)
 
@@ -372,12 +387,12 @@ Required GitHub environment secrets for `production`:
 - `PRODUCTION_SSH_PORT` (optional, defaults to `22`)
 - `PRODUCTION_SSH_USER`
 - `PRODUCTION_SSH_KEY`
-- `PRODUCTION_DEPLOY_PATH`
+- `PRODUCTION_DEPLOY_PATH` or `PRODUCTION_DEPLOY_COMMAND`
 - `PRODUCTION_HEALTH_URL` (optional)
 - `PRODUCTION_DEPLOY_SERVICES` (optional, defaults to `postgres pgbouncer redis api web`)
 
-`STAGING_DEPLOY_PATH` and `PRODUCTION_DEPLOY_PATH` must point to the repository
-root on the target server. Example:
+`STAGING_DEPLOY_PATH` and `PRODUCTION_DEPLOY_PATH`, when used, must point to the
+repository root on the target server. Example:
 
 ```text
 /srv/rAZN
