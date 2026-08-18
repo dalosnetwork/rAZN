@@ -371,6 +371,11 @@ That command should accept only `dev` or `main`, update the known repository
 path, rebuild the intended dashboard services, and leave the shared edge proxy
 alone.
 
+If the server keeps intentional local environment overrides in tracked files,
+the command may use `git reset --keep origin/<branch>` after fetching the branch.
+This keeps non-conflicting local changes while still aligning the deployed
+commit with the remote branch.
+
 Required GitHub environment secrets for `staging`:
 
 - `STAGING_SSH_HOST`
